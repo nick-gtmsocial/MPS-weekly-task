@@ -1,0 +1,1000 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MPS Studio — Staff Tasks</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#F5F3EF;--surface:#FFFFFF;--border:#E2DDD6;--text:#1A1614;--muted:#7A736B;
+  --teal:#0D9488;--teal-dark:#0F766E;--teal-light:#CCFBF1;
+  --c-kizza:#0D9488;--c-cielo:#0891B2;--c-nick:#7C3AED;--c-wesley:#2563EB;
+  --c-miso:#DC2626;--c-sam:#DB2777;--c-angel:#16A34A;--c-shared:#EA580C;
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.5}
+a{color:var(--teal);text-decoration:none}
+a:hover{text-decoration:underline}
+
+/* ── HEADER ── */
+.header{background:var(--teal-dark);color:#fff;padding:14px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.18)}
+.header-brand{font-size:18px;font-weight:700;letter-spacing:-.3px}
+.header-brand small{font-size:12px;font-weight:400;opacity:.7;margin-left:8px}
+.week-nav{display:flex;align-items:center;gap:10px}
+.week-nav button{background:rgba(255,255,255,.18);border:none;color:#fff;width:30px;height:30px;border-radius:6px;cursor:pointer;font-size:20px;line-height:1;display:flex;align-items:center;justify-content:center;transition:background .15s}
+.week-nav button:hover{background:rgba(255,255,255,.3)}
+#week-label{font-size:14px;font-weight:600;min-width:210px;text-align:center}
+.header-actions{display:flex;gap:8px}
+
+/* ── LEGEND ── */
+.legend-bar{background:var(--surface);border-bottom:1px solid var(--border);padding:8px 24px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:12px}
+.legend-title{font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-size:11px}
+.legend-item{display:flex;align-items:center;gap:5px;font-weight:500}
+.legend-chip{width:22px;height:22px;border-radius:5px;display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:10px;font-weight:700}
+
+/* ── TABS ── */
+.tabs{background:var(--surface);border-bottom:2px solid var(--border);padding:0 24px;display:flex;position:sticky;top:57px;z-index:90}
+.tab-btn{padding:11px 18px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:600;color:var(--muted);border-bottom:3px solid transparent;margin-bottom:-2px;transition:all .15s}
+.tab-btn:hover{color:var(--teal)}
+.tab-btn.active{color:var(--teal);border-bottom-color:var(--teal)}
+
+/* ── CONTENT ── */
+.main-content{padding:20px 24px;max-width:1440px;margin:0 auto}
+.tab-panel{display:none}
+.tab-panel.active{display:block}
+.section-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.section-top h2{font-size:16px;font-weight:700;color:var(--teal-dark)}
+.help-text{font-size:12px;color:var(--muted);margin-top:4px}
+
+/* ── BUTTONS ── */
+.btn{padding:7px 14px;border-radius:7px;border:none;cursor:pointer;font-size:13px;font-weight:600;transition:all .15s;display:inline-flex;align-items:center;gap:5px}
+.btn-primary{background:var(--teal);color:#fff}.btn-primary:hover{background:var(--teal-dark)}
+.btn-secondary{background:#F3F4F6;color:var(--text)}.btn-secondary:hover{background:var(--border)}
+.btn-outline{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.4)}.btn-outline:hover{background:rgba(255,255,255,.15)}
+.btn-danger{background:#FEE2E2;color:#DC2626}.btn-danger:hover{background:#FECACA}
+.btn-sm{padding:5px 10px;font-size:12px}
+.btn-xs{padding:3px 8px;font-size:11px}
+.icon-btn{background:none;border:none;cursor:pointer;padding:3px 5px;border-radius:4px;color:var(--muted);font-size:13px;transition:all .15s}
+.icon-btn:hover{background:#F3F4F6;color:var(--text)}
+.icon-btn.danger:hover{background:#FEE2E2;color:#DC2626}
+.icon-btn-white{background:rgba(255,255,255,.2);border:none;cursor:pointer;color:#fff;width:24px;height:24px;border-radius:5px;font-size:16px;line-height:1;display:inline-flex;align-items:center;justify-content:center;transition:background .15s}
+.icon-btn-white:hover{background:rgba(255,255,255,.35)}
+
+/* ── TASK TABLE ── */
+.table-wrap{overflow-x:auto;border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+#task-table{width:100%;border-collapse:collapse;background:var(--surface);min-width:860px}
+#task-table thead th{background:#F0EDE8;padding:8px 10px;text-align:center;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:2px solid var(--border)}
+#task-table thead th.col-task{text-align:left;min-width:190px;padding-left:14px}
+#task-table thead th.col-notes{text-align:left;min-width:180px}
+#task-table thead th.col-day{width:82px}
+.day-num{font-weight:800;font-size:13px;color:var(--text);display:block;margin-top:1px}
+#task-table td{padding:7px 10px;border-bottom:1px solid var(--border);vertical-align:middle}
+#task-table tbody tr:last-child td{border-bottom:none}
+.col-task-cell{font-weight:500;font-size:13px;padding-left:14px !important}
+.col-notes-cell{font-size:12px;color:var(--muted);font-style:italic}
+.day-cell{text-align:center;padding:5px 4px !important}
+.cell-chips{display:flex;gap:3px;justify-content:center;flex-wrap:wrap}
+
+/* Category header rows */
+.cat-header td{background:var(--teal-dark);color:#fff;font-weight:700;font-size:11px;letter-spacing:1px;text-transform:uppercase;padding:6px 14px !important;cursor:pointer;user-select:none}
+.cat-header td:hover{background:var(--teal)}
+.subcat-header td{background:#E0F2F1;color:var(--teal-dark);font-weight:600;font-size:12px;padding:5px 14px !important;font-style:italic}
+.toggle-icon{display:inline-block;transition:transform .2s;margin-right:7px;font-size:11px}
+.toggle-icon.closed{transform:rotate(-90deg)}
+.hidden{display:none !important}
+
+/* Cell chips & add button */
+.cell-chip{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;font-size:10px;font-weight:700;color:#fff;cursor:pointer;transition:transform .1s;position:relative}
+.cell-chip:hover{transform:scale(1.12)}
+.cell-chip.done::after{content:'✓';position:absolute;inset:0;border-radius:6px;background:rgba(22,163,74,.85);display:flex;align-items:center;justify-content:center;font-size:13px}
+.cell-chip.issue::after{content:'!';position:absolute;inset:0;border-radius:6px;background:rgba(220,38,38,.85);display:flex;align-items:center;justify-content:center;font-size:13px}
+.cell-chip.skipped{opacity:.45}
+.cell-add{width:26px;height:26px;border-radius:6px;border:2px dashed var(--border);background:none;cursor:pointer;font-size:14px;color:var(--muted);transition:all .15s;display:inline-flex;align-items:center;justify-content:center}
+.cell-add:hover{border-color:var(--teal);color:var(--teal);background:var(--teal-light)}
+
+/* ── CLASSES TAB ── */
+.class-card{background:var(--surface);border-radius:10px;padding:16px;margin-bottom:14px;box-shadow:0 1px 4px rgba(0,0,0,.07);border-left:4px solid var(--teal)}
+.class-card-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;gap:12px;flex-wrap:wrap}
+.class-title{font-weight:700;font-size:15px}
+.class-meta{display:flex;gap:14px;font-size:12px;color:var(--muted);margin-top:4px;flex-wrap:wrap}
+.class-actions{display:flex;gap:6px;flex-wrap:wrap;flex-shrink:0}
+.link-btn{display:inline-flex;align-items:center;gap:4px;padding:5px 10px;background:#EFF6FF;color:#1D4ED8;border-radius:6px;font-size:12px;font-weight:600}
+.link-btn:hover{background:#DBEAFE;text-decoration:none}
+.pieces-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px}
+.pieces-table th{background:#F9F7F4;padding:6px 8px;text-align:left;font-weight:600;color:var(--muted);border-bottom:1px solid var(--border)}
+.pieces-table td{padding:6px 8px;border-bottom:1px solid var(--border)}
+.pieces-table tr:last-child td{border-bottom:none}
+.stage-tag{display:inline-flex;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
+.no-pieces{font-size:12px;color:var(--muted);padding:10px 0;text-align:center;font-style:italic}
+.empty-state{text-align:center;padding:48px 20px;color:var(--muted)}
+.empty-state p{margin-top:8px;font-size:13px;max-width:360px;margin-left:auto;margin-right:auto}
+.empty-icon{font-size:15px;font-weight:600;margin-bottom:6px}
+
+/* ── SPECIAL TASKS TAB ── */
+.staff-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
+.staff-card{background:var(--surface);border-radius:10px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+.staff-card-header{padding:11px 14px;color:#fff;font-weight:700;display:flex;align-items:center;justify-content:space-between;font-size:14px}
+.staff-card-body{padding:12px 14px}
+.no-tasks{font-size:12px;color:var(--muted);font-style:italic;padding:8px 0}
+.special-task-card{background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:8px;border-left:3px solid var(--border)}
+.special-task-card.status-done{border-left-color:#16A34A;opacity:.75}
+.special-task-card.status-in-progress{border-left-color:#EA580C}
+.special-task-card.status-issue{border-left-color:#DC2626}
+.st-title{font-weight:600;font-size:13px;margin-bottom:3px}
+.st-scope{font-size:12px;color:var(--muted);margin-bottom:5px}
+.st-meta{display:flex;gap:8px;align-items:center;font-size:11px;color:var(--muted);flex-wrap:wrap;margin-bottom:6px}
+.st-updates{border-top:1px solid var(--border);padding-top:7px;margin-top:7px}
+.update-line{font-size:11px;color:var(--muted);padding:2px 0}
+.update-line strong{color:var(--text)}
+.st-actions{display:flex;gap:5px;margin-top:8px;flex-wrap:wrap}
+.status-tag{padding:2px 7px;border-radius:10px;font-size:11px;font-weight:600}
+.status-tag.status-todo{background:#F3F4F6;color:var(--muted)}
+.status-tag.status-in-progress{background:#FEF3C7;color:#92400E}
+.status-tag.status-done{background:#D1FAE5;color:#065F46}
+.status-tag.status-issue{background:#FEE2E2;color:#991B1B}
+
+/* ── HISTORY TAB ── */
+.history-row{background:var(--surface);border-radius:10px;padding:14px 18px;margin-bottom:8px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;border:1px solid var(--border);transition:box-shadow .15s}
+.history-row:hover{box-shadow:0 4px 14px rgba(0,0,0,.1)}
+.history-week-label{font-weight:600;font-size:14px}
+.history-meta{font-size:12px;color:var(--muted);margin-top:3px}
+.history-right{display:flex;align-items:center;gap:14px}
+.progress-wrap{display:flex;align-items:center;gap:8px}
+.progress-bar{width:100px;height:7px;background:var(--border);border-radius:4px;overflow:hidden}
+.progress-fill{height:100%;background:var(--teal);border-radius:4px}
+.progress-pct{font-size:12px;font-weight:600;color:var(--muted);min-width:50px}
+.history-arrow{font-size:20px;color:var(--muted)}
+
+/* ── MODAL ── */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.42);z-index:200;display:none;align-items:center;justify-content:center;padding:20px}
+.modal-overlay.open{display:flex}
+.modal-box{background:var(--surface);border-radius:14px;width:420px;max-width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 24px 64px rgba(0,0,0,.22)}
+.modal-header{padding:20px 20px 0;margin-bottom:16px}
+.modal-header h3{font-size:16px;font-weight:700;color:var(--teal-dark)}
+.modal-header p{font-size:12px;color:var(--muted);margin-top:3px}
+.modal-body{padding:0 20px}
+.form-field{margin-bottom:13px}
+.form-field label{display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px}
+.form-field input,.form-field select,.form-field textarea{width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:inherit;outline:none;background:var(--surface);transition:border-color .15s}
+.form-field input:focus,.form-field select:focus,.form-field textarea:focus{border-color:var(--teal)}
+.form-field textarea{resize:vertical;min-height:70px}
+.staff-checks{display:flex;flex-wrap:wrap;gap:8px;padding:4px 0}
+.staff-check{display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:500}
+.staff-check input{display:none}
+.check-chip{width:24px;height:24px;border-radius:5px;display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:10px;font-weight:700;transition:transform .1s;cursor:pointer}
+.staff-check input:not(:checked)+.check-chip{opacity:.35}
+.staff-check input:checked+.check-chip{opacity:1;transform:scale(1.1)}
+.modal-actions{padding:16px 20px 20px;display:flex;gap:8px;justify-content:flex-end;border-top:1px solid var(--border);margin-top:16px}
+</style>
+</head>
+<body>
+
+<!-- ── HEADER ── -->
+<header class="header">
+  <div class="header-brand">MPS Studio <small>Staff Tasks</small></div>
+  <div class="week-nav">
+    <button onclick="changeWeek(-1)" title="Previous week">&#8249;</button>
+    <span id="week-label">Loading...</span>
+    <button onclick="changeWeek(1)" title="Next week">&#8250;</button>
+  </div>
+  <div class="header-actions">
+    <button class="btn btn-outline btn-sm" onclick="exportJSON()">Export</button>
+    <label class="btn btn-outline btn-sm" style="cursor:pointer">Import<input type="file" accept=".json" onchange="importJSON(event)" hidden></label>
+  </div>
+</header>
+
+<!-- ── LEGEND ── -->
+<div class="legend-bar">
+  <span class="legend-title">Legend</span>
+  <div id="legend-items" style="display:flex;gap:12px;flex-wrap:wrap"></div>
+</div>
+
+<!-- ── TABS ── -->
+<nav class="tabs">
+  <button class="tab-btn active" data-tab="tasks" onclick="switchTab('tasks')">Weekly Tasks</button>
+  <button class="tab-btn" data-tab="classes" onclick="switchTab('classes')">Classes</button>
+  <button class="tab-btn" data-tab="special" onclick="switchTab('special')">Special Tasks</button>
+  <button class="tab-btn" data-tab="history" onclick="switchTab('history')">History</button>
+</nav>
+
+<!-- ── MAIN CONTENT ── -->
+<main class="main-content">
+
+  <!-- TASKS -->
+  <div id="tab-tasks" class="tab-panel active">
+    <div class="table-wrap">
+      <table id="task-table">
+        <thead id="task-thead"></thead>
+        <tbody id="task-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- CLASSES -->
+  <div id="tab-classes" class="tab-panel">
+    <div class="section-top">
+      <div>
+        <h2>Classes This Week</h2>
+        <p class="help-text">Track pieces from each class through processing stages. Links go directly to Kilnfire.</p>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="openAddClassModal()">+ Add Class</button>
+    </div>
+    <div id="classes-list"></div>
+  </div>
+
+  <!-- SPECIAL TASKS -->
+  <div id="tab-special" class="tab-panel">
+    <div class="section-top">
+      <div>
+        <h2>Special Tasks</h2>
+        <p class="help-text">Each person can have up to 3 special tasks. Staff can add updates and mark things done.</p>
+      </div>
+    </div>
+    <div id="special-grid" class="staff-grid"></div>
+  </div>
+
+  <!-- HISTORY -->
+  <div id="tab-history" class="tab-panel">
+    <div class="section-top"><h2>Past Weeks</h2></div>
+    <div id="history-list"></div>
+  </div>
+
+</main>
+
+<!-- ── MODAL ── -->
+<div id="modal-overlay" class="modal-overlay" onclick="handleOverlayClick(event)">
+  <div class="modal-box" id="modal-box">
+    <div id="modal-content"></div>
+  </div>
+</div>
+
+<!-- ── KILNFIRE PRELOADED DATA (updated by /fill-kilnfire skill) ── -->
+<!-- KILNFIRE_DATA_START -->
+<script>window.KILNFIRE_PRELOADED = null;</script>
+<!-- KILNFIRE_DATA_END -->
+
+<script>
+// ════════════════════════════════════════════════
+// STAFF & TASK DATA
+// ════════════════════════════════════════════════
+
+const STAFF = [
+  { id:'kizza',  name:'Kizza',  color:'#0D9488', initial:'K'  },
+  { id:'cielo',  name:'Cielo',  color:'#0891B2', initial:'C'  },
+  { id:'nick',   name:'Nick',   color:'#7C3AED', initial:'N'  },
+  { id:'wesley', name:'Wesley', color:'#2563EB', initial:'W'  },
+  { id:'miso',   name:'Miso',   color:'#DC2626', initial:'M'  },
+  { id:'sam',    name:'Sam',    color:'#DB2777', initial:'S'  },
+  { id:'angel',  name:'Angel',  color:'#16A34A', initial:'A'  },
+  { id:'shared', name:'Shared', color:'#EA580C', initial:'SH' },
+];
+
+const TASKS = [
+  // QUARTERLY
+  { id:'q1', cat:'QUARTERLY', name:'Apply kiln wash',             notes:'3 coats — dry in between each coat' },
+  { id:'q2', cat:'QUARTERLY', name:'Check clay trap',             notes:'' },
+  { id:'q3', cat:'QUARTERLY', name:'Check air filter',            notes:'' },
+  // MONTHLY
+  { id:'m1', cat:'MONTHLY',   name:"Prepare members' clay",       notes:'' },
+  { id:'m2', cat:'MONTHLY',   name:'Mix clear glaze',             notes:'If less than 1/3 of the bucket' },
+  { id:'m3', cat:'MONTHLY',   name:"Workshop / member's area maintenance", notes:'Sweep floor, wipe dipping glaze area, tables and under-tables' },
+  { id:'m4', cat:'MONTHLY',   name:'Recharge heat gun batteries', notes:"Recharge while in the studio. Unplug before leaving." },
+  // BI-WEEKLY
+  { id:'b1', cat:'BI-WEEKLY', name:'Check inventory',             notes:'' },
+  { id:'b2', cat:'BI-WEEKLY', name:'Washroom maintenance',        notes:'if necessary' },
+  { id:'b3', cat:'BI-WEEKLY', name:'Dispose dirty clay buckets',  notes:'' },
+  // WEEKLY
+  { id:'w1', cat:'WEEKLY',    name:'Organize materials and tools',notes:'' },
+  { id:'w2', cat:'WEEKLY',    name:'Issue invoice',               notes:'if applicable' },
+  { id:'w3', cat:'WEEKLY',    name:'Reclaim clay',                notes:'' },
+  { id:'w4', cat:'WEEKLY',    name:'Dispose recyclables',         notes:'if applicable' },
+  { id:'w5', cat:'WEEKLY',    name:'Mop floor',                   notes:'Twice a week' },
+  // EVERY SHIFT
+  { id:'e1', cat:'EVERY SHIFT', name:'Post-process (Minis)',      notes:'' },
+  { id:'e2', cat:'EVERY SHIFT', name:'Post-process (Others)',     notes:'mugs, matcha, open studio' },
+  { id:'e3', cat:'EVERY SHIFT', name:'Load kiln',                 notes:'' },
+  { id:'e4', cat:'EVERY SHIFT', name:'Unload kiln',               notes:'Unload when temp is around 85–90°F' },
+  { id:'e5', cat:'EVERY SHIFT', name:'Photo/video unloaded pieces — post IG Story', notes:'' },
+  { id:'e6', cat:'EVERY SHIFT', name:'Mark pieces ready',         notes:"If issue (underfired, stuck on cookies) let Cielo know. Don't mark pieces from same student if one has an issue." },
+  { id:'e7', cat:'EVERY SHIFT', name:'Scoop water from buckets',  notes:'Cloudy water is OK if no suspended clay or glaze particles' },
+  { id:'e8', cat:'EVERY SHIFT', name:'Dispose garbage',           notes:'if necessary' },
+  // CLASS — Before
+  { id:'cb1', cat:'CLASS', sub:'Before Class', name:'Prepare clay and tools',               notes:'Unclog underglaze squeeze bottles' },
+  { id:'cb2', cat:'CLASS', sub:'Before Class', name:'Replace saturated rinsing buckets',    notes:'Replace with clean water' },
+  // CLASS — During
+  { id:'cd1', cat:'CLASS', sub:'During Class', name:'Capture photo/video of student moments', notes:'Nice to have — ask permission first. Upload to Google Drive.' },
+  // CLASS — After
+  { id:'ca1', cat:'CLASS', sub:'After Class',  name:'Clean tools thoroughly',               notes:'' },
+  { id:'ca2', cat:'CLASS', sub:'After Class',  name:'Squeegee tables',                      notes:'' },
+  { id:'ca3', cat:'CLASS', sub:'After Class',  name:'Wash brushes',                         notes:'if used for glazing or underglazing' },
+  { id:'ca4', cat:'CLASS', sub:'After Class',  name:'Log class date and due date',          notes:'' },
+  { id:'ca5', cat:'CLASS', sub:'After Class',  name:'List glazes used for kiln tech',       notes:"Kiln tech's reference" },
+  { id:'ca6', cat:'CLASS', sub:'After Class',  name:'Post-process pieces',                  notes:'eg. attach/reinforce parts, wrap with plastic' },
+  { id:'ca7', cat:'CLASS', sub:'After Class',  name:'Photo/video of pieces — post IG story', notes:'nice to have' },
+];
+
+const CAT_ORDER = ['QUARTERLY','MONTHLY','BI-WEEKLY','WEEKLY','EVERY SHIFT','CLASS'];
+const CAT_LABELS = { 'CLASS': 'CLASS INSTRUCTOR / SUPPORT' };
+const CAT_COLLAPSED = new Set(['QUARTERLY','MONTHLY','BI-WEEKLY']);
+const DAYS = ['MON','TUE','WED','THU','FRI','SAT'];
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const STAGES = ['Greenware','Post-Process','Bisque','Underglaze','Glaze Fire','Done','Issue'];
+
+// ════════════════════════════════════════════════
+// STATE
+// ════════════════════════════════════════════════
+
+let currentWeekStart = getMonday(new Date());
+let activeTab = 'tasks';
+let db;
+let modalState = null;
+
+// ════════════════════════════════════════════════
+// STORAGE
+// ════════════════════════════════════════════════
+
+function initDB() {
+  try {
+    const raw = localStorage.getItem('mps_studio_v1');
+    db = raw ? JSON.parse(raw) : { weeks:{} };
+  } catch(e) { db = { weeks:{} }; }
+
+  // Seed any kilnfire preloaded data into new weeks
+  if (window.KILNFIRE_PRELOADED) {
+    let dirty = false;
+    Object.entries(window.KILNFIRE_PRELOADED).forEach(([k, classes]) => {
+      if (!db.weeks[k]) {
+        db.weeks[k] = { assignments:{}, specialTasks:[], classes };
+        dirty = true;
+      } else if (!db.weeks[k].classes?.length) {
+        db.weeks[k].classes = classes;
+        dirty = true;
+      }
+    });
+    if (dirty) saveDB();
+  }
+}
+
+function saveDB() {
+  try { localStorage.setItem('mps_studio_v1', JSON.stringify(db)); } catch(e) { console.error('Save failed',e); }
+}
+
+function getWeek(key) {
+  if (!db.weeks[key]) db.weeks[key] = { assignments:{}, specialTasks:[], classes:[] };
+  const w = db.weeks[key];
+  if (!w.assignments) w.assignments = {};
+  if (!w.specialTasks) w.specialTasks = [];
+  if (!w.classes) w.classes = [];
+  return w;
+}
+
+// ════════════════════════════════════════════════
+// DATE UTILITIES
+// ════════════════════════════════════════════════
+
+function getMonday(date) {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  return new Date(d.getFullYear(), d.getMonth(), diff);
+}
+
+function weekKey(monday) { return monday.toISOString().slice(0,10); }
+
+function getWeekDates(monday) {
+  return Array.from({length:6}, (_,i) => {
+    const d = new Date(monday);
+    d.setDate(d.getDate() + i);
+    return d;
+  });
+}
+
+function fmtDate(d) { return `${MONTHS[d.getMonth()]} ${d.getDate()}`; }
+
+function fmtWeekRange(monday) {
+  const dates = getWeekDates(monday);
+  const s = dates[0], e = dates[5];
+  if (s.getMonth() === e.getMonth())
+    return `${MONTHS[s.getMonth()]} ${s.getDate()}–${e.getDate()}, ${s.getFullYear()}`;
+  return `${fmtDate(s)} – ${fmtDate(e)}, ${s.getFullYear()}`;
+}
+
+// ════════════════════════════════════════════════
+// NAVIGATION
+// ════════════════════════════════════════════════
+
+function changeWeek(dir) {
+  const d = new Date(currentWeekStart);
+  d.setDate(d.getDate() + dir * 7);
+  currentWeekStart = d;
+  renderAll();
+}
+
+function switchTab(tab) {
+  activeTab = tab;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === `tab-${tab}`));
+  renderTabContent(tab);
+}
+
+// ════════════════════════════════════════════════
+// RENDER
+// ════════════════════════════════════════════════
+
+function renderAll() {
+  document.getElementById('week-label').textContent = fmtWeekRange(currentWeekStart);
+  renderTabContent(activeTab);
+}
+
+function renderTabContent(tab) {
+  if (tab === 'tasks')   renderTasksTab();
+  if (tab === 'classes') renderClassesTab();
+  if (tab === 'special') renderSpecialTab();
+  if (tab === 'history') renderHistoryTab();
+}
+
+function renderLegend() {
+  document.getElementById('legend-items').innerHTML = STAFF.map(s =>
+    `<span class="legend-item">
+      <span class="legend-chip" style="background:${s.color}">${s.initial}</span>
+      ${s.name}
+    </span>`
+  ).join('');
+}
+
+// ── TASKS TAB ──────────────────────────────────
+
+function renderTasksTab() {
+  const key = weekKey(currentWeekStart);
+  const week = getWeek(key);
+  const dates = getWeekDates(currentWeekStart);
+
+  // Header
+  document.getElementById('task-thead').innerHTML = `<tr>
+    <th class="col-task">Task</th>
+    <th class="col-notes">Notes</th>
+    ${dates.map((d,i) => `<th class="col-day">${DAYS[i]}<span class="day-num">${d.getDate()}</span></th>`).join('')}
+  </tr>`;
+
+  // Body
+  let html = '';
+  CAT_ORDER.forEach(cat => {
+    const tasks = TASKS.filter(t => t.cat === cat);
+    const label = CAT_LABELS[cat] || cat;
+    const collapsed = CAT_COLLAPSED.has(cat);
+
+    html += `<tr class="cat-header" onclick="toggleCat('${cat}')">
+      <td colspan="8">
+        <span class="toggle-icon ${collapsed ? 'closed' : ''}" id="toggle-${cat}">&#9660;</span>
+        ${label}
+      </td>
+    </tr>`;
+
+    if (cat === 'CLASS') {
+      ['Before Class','During Class','After Class'].forEach(sub => {
+        html += `<tr class="subcat-header cat-${cat}${collapsed ? ' hidden' : ''}">
+          <td colspan="8">${sub}</td>
+        </tr>`;
+        tasks.filter(t => t.sub === sub).forEach(t => {
+          html += buildTaskRow(t, cat, dates, week, collapsed);
+        });
+      });
+    } else {
+      tasks.forEach(t => { html += buildTaskRow(t, cat, dates, week, collapsed); });
+    }
+  });
+
+  document.getElementById('task-tbody').innerHTML = html;
+}
+
+function buildTaskRow(task, cat, dates, week, collapsed) {
+  const cells = dates.map((_,i) => {
+    const a = week.assignments[task.id]?.[i];
+    return `<td class="day-cell">${renderCell(task.id, i, a)}</td>`;
+  }).join('');
+  return `<tr class="task-row cat-${cat}${collapsed ? ' hidden' : ''}">
+    <td class="col-task-cell">${task.name}</td>
+    <td class="col-notes-cell">${task.notes || ''}</td>
+    ${cells}
+  </tr>`;
+}
+
+function renderCell(taskId, dayIndex, a) {
+  if (!a || !a.assignees?.length)
+    return `<button class="cell-add" onclick="openCellModal('${taskId}',${dayIndex})">+</button>`;
+  const chips = a.assignees.map(id => {
+    const s = STAFF.find(x => x.id === id);
+    return s ? `<span class="cell-chip ${a.status||''}" style="background:${s.color}"
+      onclick="openCellModal('${taskId}',${dayIndex})"
+      title="${s.name}${a.note ? ' — '+a.note : ''}">${s.initial}</span>` : '';
+  }).join('');
+  return `<div class="cell-chips">${chips}</div>`;
+}
+
+function toggleCat(cat) {
+  document.querySelectorAll(`.cat-${cat}`).forEach(r => r.classList.toggle('hidden'));
+  const icon = document.getElementById(`toggle-${cat}`);
+  if (icon) icon.classList.toggle('closed');
+}
+
+// ── CLASSES TAB ────────────────────────────────
+
+function renderClassesTab() {
+  const key = weekKey(currentWeekStart);
+  const week = getWeek(key);
+  const list = document.getElementById('classes-list');
+
+  if (!week.classes.length) {
+    list.innerHTML = `<div class="empty-state">
+      <div class="empty-icon">No classes added yet for this week</div>
+      <p>Click "Add Class" to manually add one, or run <strong>/fill-kilnfire</strong> in Claude Code to auto-populate from a Kilnfire export file.</p>
+    </div>`;
+    return;
+  }
+  list.innerHTML = week.classes.map((c,i) => buildClassCard(c, i)).join('');
+}
+
+const STAGE_STYLE = {
+  'Greenware':    ['#DCFCE7','#166534'], 'Post-Process': ['#FEF9C3','#92400E'],
+  'Bisque':       ['#FFEDD5','#9A3412'], 'Underglaze':   ['#DBEAFE','#1E40AF'],
+  'Glaze Fire':   ['#F3E8FF','#6B21A8'], 'Done':         ['#D1FAE5','#065F46'],
+  'Issue':        ['#FEE2E2','#991B1B'],
+};
+
+function buildClassCard(c, idx) {
+  const pieces = (c.pieces||[]).map((p,pi) => {
+    const [bg,fg] = STAGE_STYLE[p.stage] || ['#F3F4F6','#374151'];
+    return `<tr>
+      <td>${p.student||'—'}</td>
+      <td>${p.description||'—'}</td>
+      <td><span class="stage-tag" style="background:${bg};color:${fg}">${p.stage||'Greenware'}</span></td>
+      <td>${p.notes||''}</td>
+      <td>
+        <button class="icon-btn" onclick="openPieceModal(${idx},${pi})">&#9998;</button>
+        <button class="icon-btn danger" onclick="deletePiece(${idx},${pi})">&#10005;</button>
+      </td>
+    </tr>`;
+  }).join('');
+
+  const kilnLink = c.kilnfireLink
+    ? `<a href="${c.kilnfireLink}" target="_blank" class="link-btn">&#8599; Open in Kilnfire</a>` : '';
+
+  return `<div class="class-card">
+    <div class="class-card-top">
+      <div>
+        <div class="class-title">${c.classNum ? 'Class #'+c.classNum+' — ' : ''}${c.type||'General'}</div>
+        <div class="class-meta">
+          ${c.date ? `<span>${c.date}</span>` : ''}
+          ${c.instructor ? `<span>Instructor: ${c.instructor}</span>` : ''}
+          ${c.notes ? `<span>${c.notes}</span>` : ''}
+        </div>
+      </div>
+      <div class="class-actions">
+        ${kilnLink}
+        <button class="btn btn-sm btn-primary" onclick="openAddPieceModal(${idx})">+ Piece</button>
+        <button class="btn btn-sm btn-secondary" onclick="openEditClassModal(${idx})">Edit</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteClass(${idx})">Remove</button>
+      </div>
+    </div>
+    ${c.pieces?.length ? `
+      <table class="pieces-table">
+        <thead><tr><th>Student</th><th>Piece</th><th>Stage</th><th>Notes</th><th></th></tr></thead>
+        <tbody>${pieces}</tbody>
+      </table>` : '<p class="no-pieces">No pieces yet — click "+ Piece" to add</p>'}
+  </div>`;
+}
+
+// ── SPECIAL TASKS TAB ──────────────────────────
+
+function renderSpecialTab() {
+  const key = weekKey(currentWeekStart);
+  const week = getWeek(key);
+
+  document.getElementById('special-grid').innerHTML = STAFF.filter(s => s.id !== 'shared').map(staff => {
+    const tasks = week.specialTasks.filter(t => t.staffId === staff.id);
+    const canAdd = tasks.length < 3;
+    const cards = tasks.map(t => buildSpecialCard(t, week.specialTasks.indexOf(t))).join('');
+
+    return `<div class="staff-card">
+      <div class="staff-card-header" style="background:${staff.color}">
+        <span>${staff.name}</span>
+        ${canAdd ? `<button class="icon-btn-white" onclick="openAddSpecialModal('${staff.id}')" title="Add task">+</button>` : ''}
+      </div>
+      <div class="staff-card-body">
+        ${cards || '<p class="no-tasks">No special tasks this week</p>'}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+const STATUS_LABELS = { todo:'To Do', 'in-progress':'In Progress', done:'Done', issue:'Issue' };
+
+function buildSpecialCard(task, realIdx) {
+  const status = task.status || 'todo';
+  const updates = (task.updates||[]).slice(-3).map(u =>
+    `<div class="update-line"><strong>${u.date}</strong> — ${u.text}</div>`
+  ).join('');
+
+  return `<div class="special-task-card status-${status}">
+    <div class="st-title">${task.title}</div>
+    ${task.scope ? `<div class="st-scope">${task.scope}</div>` : ''}
+    <div class="st-meta">
+      ${task.deadline ? `<span>Due: ${task.deadline}</span>` : ''}
+      <span class="status-tag status-${status}">${STATUS_LABELS[status]||status}</span>
+    </div>
+    ${updates ? `<div class="st-updates">${updates}</div>` : ''}
+    <div class="st-actions">
+      <button class="btn btn-xs btn-primary" onclick="openUpdateModal(${realIdx})">+ Update</button>
+      <button class="btn btn-xs btn-secondary" onclick="openEditSpecialModal(${realIdx})">Edit</button>
+      <button class="btn btn-xs btn-danger" onclick="deleteSpecialTask(${realIdx})">Remove</button>
+    </div>
+  </div>`;
+}
+
+// ── HISTORY TAB ────────────────────────────────
+
+function renderHistoryTab() {
+  const list = document.getElementById('history-list');
+  const keys = Object.keys(db.weeks).sort().reverse();
+
+  if (!keys.length) {
+    list.innerHTML = '<div class="empty-state"><div class="empty-icon">No history yet</div><p>Navigate to previous weeks and add assignments to build up history.</p></div>';
+    return;
+  }
+
+  list.innerHTML = keys.map(k => {
+    const w = db.weeks[k];
+    const monday = new Date(k + 'T12:00:00');
+    const sat = new Date(monday); sat.setDate(sat.getDate() + 5);
+    const label = `${fmtDate(monday)} – ${fmtDate(sat)}, ${monday.getFullYear()}`;
+
+    const allAssign = Object.values(w.assignments||{}).flatMap(Object.values);
+    const total = allAssign.length;
+    const done = allAssign.filter(a => a.status === 'done').length;
+    const pct = total > 0 ? Math.round(done/total*100) : 0;
+    const clsCount = (w.classes||[]).length;
+    const spCount  = (w.specialTasks||[]).length;
+
+    return `<div class="history-row" onclick="jumpToWeek('${k}')">
+      <div>
+        <div class="history-week-label">${label}</div>
+        <div class="history-meta">${clsCount} class${clsCount!==1?'es':''} · ${spCount} special task${spCount!==1?'s':''}</div>
+      </div>
+      <div class="history-right">
+        <div class="progress-wrap">
+          <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+          <span class="progress-pct">${pct}% done</span>
+        </div>
+        <span class="history-arrow">&#8250;</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function jumpToWeek(key) {
+  currentWeekStart = new Date(key + 'T12:00:00');
+  switchTab('tasks');
+  renderAll();
+}
+
+// ════════════════════════════════════════════════
+// MODALS
+// ════════════════════════════════════════════════
+
+function openModal(html) {
+  document.getElementById('modal-content').innerHTML = html;
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('open');
+  modalState = null;
+}
+
+function handleOverlayClick(e) {
+  if (e.target.id === 'modal-overlay') closeModal();
+}
+
+// Cell modal
+function openCellModal(taskId, dayIndex) {
+  const key = weekKey(currentWeekStart);
+  const week = getWeek(key);
+  const a = week.assignments[taskId]?.[dayIndex] || { assignees:[], status:'todo', note:'' };
+  const task = TASKS.find(t => t.id === taskId);
+  const dates = getWeekDates(currentWeekStart);
+  modalState = { type:'cell', taskId, dayIndex };
+
+  const staffOptions = STAFF.map(s =>
+    `<label class="staff-check">
+      <input type="checkbox" name="assignees" value="${s.id}" ${a.assignees.includes(s.id)?'checked':''}>
+      <span class="check-chip" style="background:${s.color}">${s.initial}</span>
+      ${s.name}
+    </label>`
+  ).join('');
+
+  const statusOpts = [['todo','To Do'],['in-progress','In Progress'],['done','Done'],['issue','Issue'],['skipped','Skipped']]
+    .map(([v,l]) => `<option value="${v}" ${a.status===v?'selected':''}>${l}</option>`).join('');
+
+  openModal(`
+    <div class="modal-header">
+      <h3>${task?.name}</h3>
+      <p>${DAYS[dayIndex]}, ${fmtDate(dates[dayIndex])}</p>
+    </div>
+    <div class="modal-body">
+      <div class="form-field"><label>Assigned to</label><div class="staff-checks">${staffOptions}</div></div>
+      <div class="form-field"><label>Status</label><select id="cell-status">${statusOpts}</select></div>
+      <div class="form-field"><label>Note (optional)</label><textarea id="cell-note" rows="2">${a.note||''}</textarea></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="clearCell('${taskId}',${dayIndex})">Clear</button>
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveCell('${taskId}',${dayIndex})">Save</button>
+    </div>
+  `);
+}
+
+function saveCell(taskId, dayIndex) {
+  const key = weekKey(currentWeekStart);
+  const week = getWeek(key);
+  if (!week.assignments[taskId]) week.assignments[taskId] = {};
+  const assignees = [...document.querySelectorAll('input[name="assignees"]:checked')].map(i => i.value);
+  week.assignments[taskId][dayIndex] = {
+    assignees,
+    status: document.getElementById('cell-status').value,
+    note:   document.getElementById('cell-note').value,
+  };
+  saveDB(); closeModal(); renderTasksTab();
+}
+
+function clearCell(taskId, dayIndex) {
+  const key = weekKey(currentWeekStart);
+  const week = getWeek(key);
+  if (week.assignments[taskId]) delete week.assignments[taskId][dayIndex];
+  saveDB(); closeModal(); renderTasksTab();
+}
+
+// Class modals
+function openAddClassModal() {
+  modalState = { type:'addClass' };
+  openModal(buildClassForm());
+}
+
+function openEditClassModal(idx) {
+  const week = getWeek(weekKey(currentWeekStart));
+  modalState = { type:'editClass', idx };
+  openModal(buildClassForm(week.classes[idx]));
+}
+
+function buildClassForm(c={}) {
+  const instrOpts = STAFF.filter(s => s.id !== 'shared').map(s =>
+    `<option value="${s.name}" ${c.instructor===s.name?'selected':''}>${s.name}</option>`
+  ).join('');
+  return `
+    <div class="modal-header"><h3>${c.classNum ? 'Edit Class' : 'Add Class'}</h3></div>
+    <div class="modal-body">
+      <div class="form-field"><label>Class # (from Kilnfire)</label>
+        <input type="text" id="cls-num" value="${c.classNum||''}" placeholder="e.g. 1042"></div>
+      <div class="form-field"><label>Class Type</label>
+        <input type="text" id="cls-type" value="${c.type||''}" placeholder="e.g. Minis, Mugs, Open Studio"></div>
+      <div class="form-field"><label>Date</label>
+        <input type="date" id="cls-date" value="${c.date||''}"></div>
+      <div class="form-field"><label>Instructor</label>
+        <select id="cls-instr"><option value="">— Select —</option>${instrOpts}</select></div>
+      <div class="form-field"><label>Kilnfire Link (paste URL)</label>
+        <input type="url" id="cls-link" value="${c.kilnfireLink||''}" placeholder="https://..."></div>
+      <div class="form-field"><label>Notes</label>
+        <textarea id="cls-notes" rows="2">${c.notes||''}</textarea></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveClass()">Save</button>
+    </div>`;
+}
+
+function saveClass() {
+  const key = weekKey(currentWeekStart);
+  const week = getWeek(key);
+  const cls = {
+    classNum:     document.getElementById('cls-num').value,
+    type:         document.getElementById('cls-type').value,
+    date:         document.getElementById('cls-date').value,
+    instructor:   document.getElementById('cls-instr').value,
+    kilnfireLink: document.getElementById('cls-link').value,
+    notes:        document.getElementById('cls-notes').value,
+    pieces: modalState.type === 'editClass' ? (week.classes[modalState.idx].pieces||[]) : [],
+  };
+  if (modalState.type === 'editClass') week.classes[modalState.idx] = cls;
+  else week.classes.push(cls);
+  saveDB(); closeModal(); renderClassesTab();
+}
+
+function deleteClass(idx) {
+  if (!confirm('Remove this class?')) return;
+  const week = getWeek(weekKey(currentWeekStart));
+  week.classes.splice(idx,1);
+  saveDB(); renderClassesTab();
+}
+
+// Piece modals
+function openAddPieceModal(classIdx) {
+  modalState = { type:'addPiece', classIdx };
+  openModal(buildPieceForm());
+}
+
+function openPieceModal(classIdx, pieceIdx) {
+  const week = getWeek(weekKey(currentWeekStart));
+  modalState = { type:'editPiece', classIdx, pieceIdx };
+  openModal(buildPieceForm(week.classes[classIdx].pieces[pieceIdx]));
+}
+
+function buildPieceForm(p={}) {
+  const stageOpts = STAGES.map(s =>
+    `<option value="${s}" ${p.stage===s?'selected':''}>${s}</option>`
+  ).join('');
+  return `
+    <div class="modal-header"><h3>${p.student ? 'Edit Piece' : 'Add Piece'}</h3></div>
+    <div class="modal-body">
+      <div class="form-field"><label>Student Name</label>
+        <input type="text" id="p-student" value="${p.student||''}" placeholder="Student's name"></div>
+      <div class="form-field"><label>Piece Description</label>
+        <input type="text" id="p-desc" value="${p.description||''}" placeholder="e.g. mini bowl, mug..."></div>
+      <div class="form-field"><label>Processing Stage</label>
+        <select id="p-stage">${stageOpts}</select></div>
+      <div class="form-field"><label>Notes</label>
+        <textarea id="p-notes" rows="2">${p.notes||''}</textarea></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="savePiece()">Save</button>
+    </div>`;
+}
+
+function savePiece() {
+  const week = getWeek(weekKey(currentWeekStart));
+  const piece = {
+    student:     document.getElementById('p-student').value,
+    description: document.getElementById('p-desc').value,
+    stage:       document.getElementById('p-stage').value,
+    notes:       document.getElementById('p-notes').value,
+  };
+  if (modalState.type === 'editPiece') week.classes[modalState.classIdx].pieces[modalState.pieceIdx] = piece;
+  else week.classes[modalState.classIdx].pieces.push(piece);
+  saveDB(); closeModal(); renderClassesTab();
+}
+
+function deletePiece(classIdx, pieceIdx) {
+  if (!confirm('Remove this piece?')) return;
+  const week = getWeek(weekKey(currentWeekStart));
+  week.classes[classIdx].pieces.splice(pieceIdx,1);
+  saveDB(); renderClassesTab();
+}
+
+// Special task modals
+function openAddSpecialModal(staffId) {
+  modalState = { type:'addSpecial', staffId };
+  openModal(buildSpecialForm({ staffId }));
+}
+
+function openEditSpecialModal(idx) {
+  const week = getWeek(weekKey(currentWeekStart));
+  modalState = { type:'editSpecial', idx };
+  openModal(buildSpecialForm(week.specialTasks[idx]));
+}
+
+function buildSpecialForm(t={}) {
+  const statusOpts = [['todo','To Do'],['in-progress','In Progress'],['done','Done'],['issue','Issue']]
+    .map(([v,l]) => `<option value="${v}" ${(t.status||'todo')===v?'selected':''}>${l}</option>`).join('');
+  return `
+    <div class="modal-header"><h3>${t.title ? 'Edit Special Task' : 'Add Special Task'}</h3></div>
+    <div class="modal-body">
+      <div class="form-field"><label>Task Title</label>
+        <input type="text" id="st-title" value="${t.title||''}" placeholder="What needs to be done?"></div>
+      <div class="form-field"><label>Scope / Details</label>
+        <textarea id="st-scope" rows="3">${t.scope||''}</textarea></div>
+      <div class="form-field"><label>Deadline</label>
+        <input type="date" id="st-deadline" value="${t.deadline||''}"></div>
+      <div class="form-field"><label>Status</label>
+        <select id="st-status">${statusOpts}</select></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveSpecialTask()">Save</button>
+    </div>`;
+}
+
+function saveSpecialTask() {
+  const key = weekKey(currentWeekStart);
+  const week = getWeek(key);
+  const task = {
+    staffId:  modalState.staffId || week.specialTasks[modalState.idx]?.staffId,
+    title:    document.getElementById('st-title').value,
+    scope:    document.getElementById('st-scope').value,
+    deadline: document.getElementById('st-deadline').value,
+    status:   document.getElementById('st-status').value,
+    updates:  modalState.type === 'editSpecial' ? (week.specialTasks[modalState.idx].updates||[]) : [],
+  };
+  if (modalState.type === 'editSpecial') week.specialTasks[modalState.idx] = task;
+  else week.specialTasks.push(task);
+  saveDB(); closeModal(); renderSpecialTab();
+}
+
+function deleteSpecialTask(idx) {
+  if (!confirm('Remove this task?')) return;
+  const week = getWeek(weekKey(currentWeekStart));
+  week.specialTasks.splice(idx,1);
+  saveDB(); renderSpecialTab();
+}
+
+function openUpdateModal(idx) {
+  modalState = { type:'addUpdate', idx };
+  openModal(`
+    <div class="modal-header"><h3>Add Update</h3></div>
+    <div class="modal-body">
+      <div class="form-field"><label>Update</label>
+        <textarea id="upd-text" rows="3" placeholder="What happened? What is the current status?"></textarea></div>
+      <div class="form-field"><label>Change Status (optional)</label>
+        <select id="upd-status">
+          <option value="">Keep current status</option>
+          <option value="todo">To Do</option>
+          <option value="in-progress">In Progress</option>
+          <option value="done">Done</option>
+          <option value="issue">Issue</option>
+        </select></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveUpdate()">Save Update</button>
+    </div>`);
+}
+
+function saveUpdate() {
+  const week = getWeek(weekKey(currentWeekStart));
+  const task = week.specialTasks[modalState.idx];
+  const text = document.getElementById('upd-text').value.trim();
+  const newStatus = document.getElementById('upd-status').value;
+  if (text) {
+    if (!task.updates) task.updates = [];
+    task.updates.push({ date: new Date().toLocaleDateString('en-CA'), text });
+  }
+  if (newStatus) task.status = newStatus;
+  saveDB(); closeModal(); renderSpecialTab();
+}
+
+// ════════════════════════════════════════════════
+// EXPORT / IMPORT
+// ════════════════════════════════════════════════
+
+function exportJSON() {
+  const blob = new Blob([JSON.stringify(db, null, 2)], { type:'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `mps-studio-backup-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+}
+
+function importJSON(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      db = JSON.parse(ev.target.result);
+      saveDB(); renderAll();
+      alert('Data imported successfully!');
+    } catch { alert('Import failed — invalid file format.'); }
+  };
+  reader.readAsText(file);
+}
+
+// ════════════════════════════════════════════════
+// INIT
+// ════════════════════════════════════════════════
+
+document.addEventListener('DOMContentLoaded', () => {
+  initDB();
+  renderLegend();
+  renderAll();
+});
+</script>
+</body>
+</html>
