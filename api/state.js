@@ -30,10 +30,17 @@ async function handleGet(req, res) {
     return res.status(400).json({ error: 'week query param must be YYYY-MM-DD (Monday of the week)' });
   }
 
-  const [assignmentRows, specialRows, classRows] = await Promise.all([
+  // Compute the Sunday of the week so goal-task queries can filter by [Mon, Sun].
+  const weekEnd = addDaysIso(weekKey, 6);
+
+  const [assignmentRows, specialRows, classRows, goalTaskRows] = await Promise.all([
     sbGet(`week_assignments?week_key=eq.${weekKey}&select=task_id,day_idx,assignees,status,note`),
     sbGet(`special_tasks?week_key=eq.${weekKey}&select=id,staff_id,title,scope,deadline,status,created_at,special_task_updates(id,update_date,text,created_at)&order=created_at.asc`),
     sbGet(`classes?week_key=eq.${weekKey}&select=id,class_num,type,class_date,instructor,kilnfire_link,kilnfire_external_id,notes,created_at,pieces(id,student,description,stage,notes,stage_history,created_at)&order=created_at.asc`),
+    // Goal tasks whose deadline is in this week, OR that are still open and
+    // were due before this week (to surface overdue items regardless of
+    // which week you're viewing).
+    sbGet(`goal_tasks?deadline=lte.${weekEnd}&or=(deadline.gte.${weekKey},status.neq.done)&select=id,goal_id,section,subsection,title,owner,deadline,status,notes,goals(id,title,target_date)&order=deadline.asc.nullslast`),
   ]);
 
   return res.status(200).json({
@@ -41,7 +48,29 @@ async function handleGet(req, res) {
     assignments:  shapeAssignments(assignmentRows),
     specialTasks: specialRows.map(shapeSpecialTask),
     classes:      classRows.map(shapeClass),
+    goalTasks:    goalTaskRows.map(shapeGoalTaskForWeek),
   });
+}
+
+function addDaysIso(iso, n) {
+  const d = new Date(`${iso}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+function shapeGoalTaskForWeek(r) {
+  return {
+    id:         r.id,
+    goalId:     r.goal_id,
+    goalTitle:  r.goals?.title || null,
+    section:    r.section,
+    subsection: r.subsection,
+    title:      r.title,
+    owner:      r.owner,
+    deadline:   r.deadline,
+    status:     r.status,
+    notes:      r.notes,
+  };
 }
 
 function shapeAssignments(rows) {

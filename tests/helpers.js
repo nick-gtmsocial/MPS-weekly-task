@@ -4,7 +4,9 @@
 //   - wipeTestWeek(): deletes everything in the test week so runs start clean.
 //   - enterPassword(): accepts the window.prompt dialog on page load.
 
-export const TEST_WEEK_KEY = '2099-01-05';   // Monday in the far future
+export const TEST_WEEK_KEY   = '2099-01-05';   // Monday in the far future
+export const TEST_GOAL_MARK  = '[GOALTEST]';   // unique marker for test goals
+export const TEST_TARGET_ISO = '2099-05-10';   // target date used by goal tests
 
 const BASE = process.env.BASE_URL;
 const PW   = process.env.STUDIO_PASSWORD;
@@ -40,6 +42,33 @@ export async function wipeTestWeek() {
   // Cascade-delete classes removes their pieces automatically.
   for (const c of bundle.classes || [])       await api('deleteClass',       { id: c.id });
   for (const t of bundle.specialTasks || [])  await api('deleteSpecialTask', { id: t.id });
+}
+
+export async function goalsApiRaw(op, payload = {}) {
+  const res = await fetch(`${BASE}/api/goals`, {
+    method:  'POST',
+    headers: { 'Authorization': `Bearer ${PW}`, 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ op, ...payload }),
+  });
+  if (!res.ok) throw new Error(`goals ${op} failed: ${res.status} ${await res.text()}`);
+  return res.json();
+}
+
+export async function fetchGoals() {
+  const res = await fetch(`${BASE}/api/goals`, { headers: { 'Authorization': `Bearer ${PW}` } });
+  if (!res.ok) throw new Error(`fetchGoals failed: ${res.status}`);
+  return res.json();
+}
+
+// Only delete goals marked with the test prefix — keeps accidentally-created
+// real goals safe if a dev runs the suite against prod data.
+export async function wipeTestGoals() {
+  const { goals } = await fetchGoals();
+  for (const g of goals) {
+    if (g.title?.includes(TEST_GOAL_MARK)) {
+      await goalsApiRaw('deleteGoal', { id: g.id });
+    }
+  }
 }
 
 // Wait until the week bundle satisfies the predicate, polling the API.

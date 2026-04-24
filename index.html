@@ -65,6 +65,52 @@ a:hover{text-decoration:underline}
 .me-card-status.issue{background:#FEE2E2;color:#991B1B}
 .me-card-status.skipped{background:#F3F4F6;color:#6B7280}
 
+/* ── GOALS TAB ── */
+.goal-card{background:var(--surface);border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.08);margin-bottom:12px;overflow:hidden}
+.goal-card-head{padding:14px 18px;display:grid;grid-template-columns:1fr auto auto;gap:14px;align-items:center;cursor:pointer}
+.goal-card-head:hover{background:#FAFAF7}
+.goal-card-title{font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px}
+.goal-card-meta{font-size:12px;color:var(--muted);display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.goal-pill{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;font-weight:600;font-size:11px}
+.goal-pill.countdown{background:var(--teal-light);color:var(--teal-dark)}
+.goal-pill.countdown.past{background:#FEE2E2;color:#991B1B}
+.goal-pill.countdown.today{background:#FDE68A;color:#92400E}
+.goal-pill.owner{background:#EDE9FE;color:#5B21B6}
+.goal-pill.status{background:#E5E7EB;color:#374151}
+.goal-pill.status.done{background:#D1FAE5;color:#065F46}
+.goal-pill.status.cancelled{background:#F3F4F6;color:#6B7280}
+.goal-progress{min-width:120px}
+.goal-progress-bar{height:6px;background:#E5E7EB;border-radius:3px;overflow:hidden}
+.goal-progress-fill{height:100%;background:var(--teal);transition:width .3s}
+.goal-progress-label{font-size:11px;color:var(--muted);margin-top:3px;text-align:right}
+.goal-expand-icon{font-size:14px;color:var(--muted);transition:transform .15s}
+.goal-card.expanded .goal-expand-icon{transform:rotate(90deg)}
+.goal-card-body{border-top:1px solid var(--border);padding:14px 18px;display:none;background:#FAFAF7}
+.goal-card.expanded .goal-card-body{display:block}
+.goal-section{margin-bottom:14px}
+.goal-section-head{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:var(--teal-dark);margin-bottom:6px;display:flex;align-items:center;justify-content:space-between}
+.goal-subsection-head{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin:8px 0 4px 8px}
+.goal-task-row{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:8px 12px;margin-bottom:4px;display:grid;grid-template-columns:1fr auto auto auto auto;gap:10px;align-items:center;cursor:pointer;font-size:13px;transition:border-color .15s}
+.goal-task-row:hover{border-color:var(--teal)}
+.goal-task-title{font-weight:500;color:var(--text);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.goal-task-title.done{text-decoration:line-through;color:var(--muted)}
+.goal-task-pill{font-size:10px;font-weight:700;padding:2px 7px;border-radius:3px;white-space:nowrap}
+.goal-task-pill.owner{background:#EDE9FE;color:#5B21B6}
+.goal-task-pill.deadline{background:#F3F4F6;color:#374151}
+.goal-task-pill.deadline.overdue{background:#FEE2E2;color:#991B1B}
+.goal-task-pill.status{text-transform:uppercase;letter-spacing:.4px}
+.goal-task-pill.status.todo{background:#E5E7EB;color:#374151}
+.goal-task-pill.status.in-progress{background:#DBEAFE;color:#1E40AF}
+.goal-task-pill.status.done{background:#D1FAE5;color:#065F46}
+.goal-task-pill.status.issue{background:#FEE2E2;color:#991B1B}
+.goal-add-task-btn{background:transparent;border:1px dashed var(--border);color:var(--muted);width:100%;padding:6px;border-radius:5px;font-size:11px;cursor:pointer;font-weight:600;margin-top:4px}
+.goal-add-task-btn:hover{border-color:var(--teal);color:var(--teal)}
+.goal-card-actions{padding:10px 18px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end}
+.template-preview{background:#F9FAFB;border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin-top:8px;font-size:12px;color:var(--muted);max-height:200px;overflow-y:auto}
+.template-preview-section{font-weight:700;color:var(--text);margin-top:6px;font-size:11px;text-transform:uppercase;letter-spacing:.4px}
+.template-preview-section:first-child{margin-top:0}
+.template-preview-task{padding-left:8px;margin:2px 0}
+
 /* ── LEGEND ── */
 .legend-bar{background:var(--surface);border-bottom:1px solid var(--border);padding:8px 24px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:12px}
 .legend-title{font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-size:11px}
@@ -238,6 +284,7 @@ a:hover{text-decoration:underline}
   <button class="tab-btn active" data-tab="tasks"   onclick="switchTab('tasks')">Weekly Tasks</button>
   <button class="tab-btn" data-tab="classes" onclick="switchTab('classes')">Classes</button>
   <button class="tab-btn" data-tab="special" onclick="switchTab('special')">Special Tasks</button>
+  <button class="tab-btn" data-tab="goals"   onclick="switchTab('goals')">Goals</button>
   <button class="tab-btn" data-tab="history" onclick="switchTab('history')">History</button>
 </nav>
 
@@ -280,6 +327,18 @@ a:hover{text-decoration:underline}
       </div>
     </div>
     <div id="special-grid" class="staff-grid"></div>
+  </div>
+
+  <!-- GOALS -->
+  <div id="tab-goals" class="tab-panel">
+    <div class="section-top">
+      <div>
+        <h2>Goals</h2>
+        <p class="help-text">Backwards-plan from a target date. Create a goal from a template (like the campaign launch playbook) and every task gets a deadline relative to the target.</p>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="openNewGoalModal()">+ New Goal</button>
+    </div>
+    <div id="goals-list"></div>
   </div>
 
   <!-- HISTORY -->
@@ -375,8 +434,9 @@ const STAGES = ['Greenware','Post-Process','Bisque','Underglaze','Glaze Fire','D
 
 let currentWeekStart = getMonday(new Date());
 let activeTab = 'tasks';
-let db = { weeks: {} };           // in-memory cache of weeks loaded this session
+let db = { weeks: {}, goals: [], templates: [] };
 let loadedWeeks = new Set();      // weeks we've fetched (regardless of emptiness)
+let goalsLoaded = false;          // one-time lazy load of goals + templates
 let modalState = null;
 let currentUser = null;           // staff.id — persisted in localStorage per device
 
@@ -454,7 +514,7 @@ function setSyncStatus(state, detail) {
 
 // Ensure a week slot exists in the in-memory cache.
 function ensureWeekSlot(key) {
-  if (!db.weeks[key]) db.weeks[key] = { assignments:{}, specialTasks:[], classes:[] };
+  if (!db.weeks[key]) db.weeks[key] = { assignments:{}, specialTasks:[], classes:[], goalTasks:[] };
   return db.weeks[key];
 }
 
@@ -469,9 +529,33 @@ async function loadWeek(key) {
     assignments:  bundle.assignments  || {},
     specialTasks: bundle.specialTasks  || [],
     classes:      bundle.classes       || [],
+    goalTasks:    bundle.goalTasks     || [],
   };
   loadedWeeks.add(key);
   return db.weeks[key];
+}
+
+// Fetch all goals + templates. Called on first visit to the Goals tab and
+// after any mutation that changes the global goal list.
+async function loadGoals() {
+  const result = await apiRequest('GET', '/api/goals');
+  db.goals     = result.goals     || [];
+  db.templates = result.templates || [];
+  goalsLoaded  = true;
+}
+
+// Shorthand for hitting /api/goals with a mutation op. Mirrors api() for /api/state.
+async function goalsApi(op, payload = {}) {
+  setSyncStatus('saving');
+  try {
+    const result = await apiRequest('POST', '/api/goals', { op, ...payload });
+    setSyncStatus('saved');
+    return result;
+  } catch (e) {
+    console.error(`goals op=${op} failed`, e);
+    setSyncStatus('error', e.message);
+    throw e;
+  }
 }
 
 // Called on first load + whenever the user navigates to a week we haven't fetched.
@@ -575,7 +659,23 @@ function renderTabContent(tab) {
   if (tab === 'tasks')   renderTasksTab();
   if (tab === 'classes') renderClassesTab();
   if (tab === 'special') renderSpecialTab();
+  if (tab === 'goals')   renderGoalsTabAsync();
   if (tab === 'history') renderHistoryTab();
+}
+
+// Lazy-load goals on first visit to the tab, then re-render.
+async function renderGoalsTabAsync() {
+  if (!goalsLoaded) {
+    document.getElementById('goals-list').innerHTML =
+      '<div class="empty-state"><div class="empty-icon">Loading…</div></div>';
+    try { await loadGoals(); }
+    catch (e) {
+      document.getElementById('goals-list').innerHTML =
+        `<div class="empty-state"><div class="empty-icon">Couldn't load goals</div><p>${e.message}</p></div>`;
+      return;
+    }
+  }
+  renderGoalsTab();
 }
 
 function renderLegend() {
@@ -673,6 +773,19 @@ function renderMyWeekTab() {
     });
   }
 
+  for (const t of week.goalTasks || []) {
+    if (t.owner !== currentUser) continue;
+    myItems.push({
+      source:   'goal',
+      title:    t.title,
+      notes:    t.goalTitle ? `${t.goalTitle}${t.section ? ' · ' + t.section : ''}` : (t.notes || ''),
+      status:   t.status || 'todo',
+      dateIso:  t.deadline || null,
+      dayLabel: t.deadline ? `Due ${fmtShortDate(t.deadline)}` : '',
+      onClick:  `openEditGoalTaskModal('${t.id}','${t.goalId}')`,
+    });
+  }
+
   // Bucket. Overdue = past + not done. Today only shows when viewing the current week.
   const overdue = myItems.filter(i => i.dateIso && i.dateIso <  referenceIso && i.status !== 'done');
   const today   = isCurrentWeek
@@ -682,7 +795,7 @@ function renderMyWeekTab() {
 
   const renderCard = (item, cls) =>
     `<div class="me-card ${cls}" onclick="${item.onClick}">
-      <span class="me-card-source ${item.source}">${item.source === 'weekly' ? 'Weekly' : 'Special'}</span>
+      <span class="me-card-source ${item.source}">${item.source === 'weekly' ? 'Weekly' : item.source === 'special' ? 'Special' : 'Goal'}</span>
       <div class="me-card-main">
         <div class="me-card-title">${item.title}</div>
         ${item.notes ? `<div class="me-card-notes">${item.notes}</div>` : ''}
@@ -727,6 +840,386 @@ function renderMyWeekTab() {
     </div>`);
 
   host.innerHTML = html.join('');
+}
+
+// ── GOALS TAB ──────────────────────────────────
+
+function renderGoalsTab() {
+  const host = document.getElementById('goals-list');
+
+  if (!db.goals.length) {
+    host.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">No goals yet</div>
+        <p>Click "+ New Goal" to set a target date. Use the Campaign Launch template for social campaigns — every task gets a deadline relative to your target.</p>
+      </div>`;
+    return;
+  }
+
+  host.innerHTML = db.goals.map(buildGoalCard).join('');
+}
+
+function buildGoalCard(g) {
+  const today        = new Date().toISOString().slice(0, 10);
+  const daysToTarget = daysBetween(today, g.targetDate);
+  const ownerStaff   = g.owner && STAFF.find(s => s.id === g.owner);
+  const pct          = g.totalTasks > 0 ? Math.round((g.doneTasks / g.totalTasks) * 100) : 0;
+
+  const countdown = daysToTarget > 0
+    ? `<span class="goal-pill countdown">${daysToTarget}d to go</span>`
+    : daysToTarget === 0
+      ? `<span class="goal-pill countdown today">Today</span>`
+      : `<span class="goal-pill countdown past">${Math.abs(daysToTarget)}d past</span>`;
+
+  return `
+    <div class="goal-card" id="goal-card-${g.id}">
+      <div class="goal-card-head" onclick="toggleGoalExpand('${g.id}')">
+        <div>
+          <div class="goal-card-title">${escapeHtml(g.title)}</div>
+          <div class="goal-card-meta">
+            <span>🎯 ${fmtLongDate(g.targetDate)}</span>
+            ${countdown}
+            ${ownerStaff ? `<span class="goal-pill owner" style="background:${ownerStaff.color}22;color:${ownerStaff.color}">${ownerStaff.name}</span>` : ''}
+            ${g.status === 'done'      ? '<span class="goal-pill status done">Done</span>'      : ''}
+            ${g.status === 'cancelled' ? '<span class="goal-pill status cancelled">Cancelled</span>' : ''}
+          </div>
+        </div>
+        <div class="goal-progress">
+          <div class="goal-progress-bar"><div class="goal-progress-fill" style="width:${pct}%"></div></div>
+          <div class="goal-progress-label">${g.doneTasks} / ${g.totalTasks} done</div>
+        </div>
+        <div class="goal-expand-icon">&#9654;</div>
+      </div>
+      <div class="goal-card-body" id="goal-body-${g.id}">
+        <div class="empty-state" style="padding:12px"><div class="empty-icon">Loading tasks…</div></div>
+      </div>
+    </div>`;
+}
+
+async function toggleGoalExpand(goalId) {
+  const card = document.getElementById(`goal-card-${goalId}`);
+  const body = document.getElementById(`goal-body-${goalId}`);
+  const willExpand = !card.classList.contains('expanded');
+  card.classList.toggle('expanded');
+
+  if (willExpand && body.dataset.loaded !== 'true') {
+    try {
+      const { tasks } = await apiRequest('GET', `/api/goals?id=${goalId}`);
+      body.innerHTML   = renderGoalBody(goalId, tasks);
+      body.dataset.loaded = 'true';
+    } catch (e) {
+      body.innerHTML = `<div class="empty-state"><div class="empty-icon">Couldn't load tasks</div><p>${e.message}</p></div>`;
+    }
+  }
+}
+
+function renderGoalBody(goalId, tasks) {
+  // Group tasks by section, then subsection. Keep insertion order (sortIdx already).
+  const sections = new Map();
+  for (const t of tasks) {
+    const s = t.section || '(No section)';
+    if (!sections.has(s)) sections.set(s, new Map());
+    const subKey = t.subsection || '';
+    if (!sections.get(s).has(subKey)) sections.get(s).set(subKey, []);
+    sections.get(s).get(subKey).push(t);
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  const sectionHtml = [];
+  for (const [sectionName, subsectionMap] of sections) {
+    const parts = [
+      `<div class="goal-section-head">${escapeHtml(sectionName)}
+        <button class="btn btn-xs btn-secondary" onclick="openAddGoalTaskModal('${goalId}', ${JSON.stringify(sectionName).replace(/"/g, '&quot;')})">+ Task</button>
+      </div>`,
+    ];
+
+    for (const [subsection, subTasks] of subsectionMap) {
+      if (subsection) parts.push(`<div class="goal-subsection-head">${escapeHtml(subsection)}</div>`);
+      for (const t of subTasks) {
+        const ownerStaff = t.owner && STAFF.find(s => s.id === t.owner);
+        const isOverdue  = t.deadline && t.deadline < today && t.status !== 'done';
+        parts.push(`
+          <div class="goal-task-row" onclick="openEditGoalTaskModal('${t.id}', '${goalId}')">
+            <div class="goal-task-title ${t.status === 'done' ? 'done' : ''}">${escapeHtml(t.title)}</div>
+            ${ownerStaff ? `<span class="goal-task-pill owner" style="background:${ownerStaff.color}22;color:${ownerStaff.color}">${ownerStaff.initial}</span>` : '<span></span>'}
+            ${t.deadline ? `<span class="goal-task-pill deadline ${isOverdue ? 'overdue' : ''}">${fmtShortDate(t.deadline)}</span>` : '<span></span>'}
+            <span class="goal-task-pill status ${t.status}">${STATUS_LABELS[t.status] || t.status}</span>
+            <span></span>
+          </div>`);
+      }
+    }
+    sectionHtml.push(`<div class="goal-section">${parts.join('')}</div>`);
+  }
+
+  return sectionHtml.join('') + `
+    <div class="goal-card-actions">
+      <button class="btn btn-sm btn-secondary" onclick="openEditGoalModal('${goalId}')">Edit goal</button>
+      <button class="btn btn-sm btn-danger"    onclick="deleteGoal('${goalId}')">Delete</button>
+    </div>`;
+}
+
+// ── Goal modals ──────────────────────────────
+
+async function openNewGoalModal() {
+  // Make sure templates are loaded — the user may click "+ New Goal" before the
+  // lazy Goals-tab load completes (or from a tab where it's never run).
+  if (!goalsLoaded) await loadGoals();
+  modalState = { type: 'newGoal' };
+  const staffOpts = [{ id:'', name:'— No owner —' }]
+    .concat(STAFF.filter(s => s.id !== 'shared'))
+    .map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+  const templateOpts = '<option value="">— Freeform (no template) —</option>' +
+    db.templates.map(t => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('');
+
+  openModal(`
+    <div class="modal-header"><h3>New Goal</h3></div>
+    <div class="modal-body">
+      <div class="form-field"><label>Title</label>
+        <input type="text" id="goal-title" placeholder="e.g. Mother's Day Campaign"></div>
+      <div class="form-field"><label>Target date</label>
+        <input type="date" id="goal-target"></div>
+      <div class="form-field"><label>Owner</label>
+        <select id="goal-owner">${staffOpts}</select></div>
+      <div class="form-field"><label>Template</label>
+        <select id="goal-template" onchange="renderTemplatePreview()">${templateOpts}</select>
+        <div id="template-preview-host"></div>
+      </div>
+      <div class="form-field"><label>Notes</label>
+        <textarea id="goal-notes" rows="2"></textarea></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveNewGoal()">Create</button>
+    </div>`);
+}
+
+function renderTemplatePreview() {
+  const id   = document.getElementById('goal-template').value;
+  const host = document.getElementById('template-preview-host');
+  if (!id) { host.innerHTML = ''; return; }
+  const tmpl = db.templates.find(t => t.id === id);
+  if (!tmpl) { host.innerHTML = ''; return; }
+
+  const parts = [];
+  for (const s of tmpl.sections) {
+    parts.push(`<div class="template-preview-section">${escapeHtml(s.name)} (${s.tasks.length} tasks)</div>`);
+    for (const t of s.tasks.slice(0, 3)) {
+      const off = typeof t.offset_days === 'number'
+        ? ` <em>(${t.offset_days === 0 ? 'day of' : t.offset_days > 0 ? `+${t.offset_days}d` : `${t.offset_days}d`})</em>`
+        : '';
+      parts.push(`<div class="template-preview-task">• ${escapeHtml(t.title)}${off}</div>`);
+    }
+    if (s.tasks.length > 3) parts.push(`<div class="template-preview-task">…and ${s.tasks.length - 3} more</div>`);
+  }
+  host.innerHTML = `<div class="template-preview">${parts.join('')}</div>`;
+}
+
+async function saveNewGoal() {
+  const payload = {
+    title:      document.getElementById('goal-title').value.trim(),
+    targetDate: document.getElementById('goal-target').value,
+    owner:      document.getElementById('goal-owner').value || null,
+    notes:      document.getElementById('goal-notes').value.trim() || null,
+    templateId: document.getElementById('goal-template').value || null,
+  };
+  if (!payload.title || !payload.targetDate) { alert('Title and target date are required.'); return; }
+  closeModal();
+  try {
+    await goalsApi('createGoal', payload);
+    await loadGoals();
+    renderGoalsTab();
+  } catch (e) { alert(`Create failed: ${e.message}`); }
+}
+
+function openEditGoalModal(goalId) {
+  const goal = db.goals.find(g => g.id === goalId);
+  if (!goal) return;
+  modalState = { type: 'editGoal', id: goalId };
+  const staffOpts = [{ id:'', name:'— No owner —' }]
+    .concat(STAFF.filter(s => s.id !== 'shared'))
+    .map(s => `<option value="${s.id}" ${s.id === (goal.owner || '') ? 'selected' : ''}>${s.name}</option>`).join('');
+  const statusOpts = ['active','done','cancelled'].map(s =>
+    `<option value="${s}" ${s === goal.status ? 'selected' : ''}>${s}</option>`).join('');
+  openModal(`
+    <div class="modal-header"><h3>Edit Goal</h3></div>
+    <div class="modal-body">
+      <div class="form-field"><label>Title</label>
+        <input type="text" id="goal-title" value="${escapeAttr(goal.title)}"></div>
+      <div class="form-field"><label>Target date</label>
+        <input type="date" id="goal-target" value="${goal.targetDate}"></div>
+      <div class="form-field"><label>Owner</label>
+        <select id="goal-owner">${staffOpts}</select></div>
+      <div class="form-field"><label>Status</label>
+        <select id="goal-status">${statusOpts}</select></div>
+      <div class="form-field"><label>Notes</label>
+        <textarea id="goal-notes" rows="2">${escapeHtml(goal.notes || '')}</textarea></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveGoalEdit()">Save</button>
+    </div>`);
+}
+
+async function saveGoalEdit() {
+  const id   = modalState.id;
+  const body = {
+    id,
+    title:      document.getElementById('goal-title').value.trim(),
+    targetDate: document.getElementById('goal-target').value,
+    owner:      document.getElementById('goal-owner').value || null,
+    status:     document.getElementById('goal-status').value,
+    notes:      document.getElementById('goal-notes').value.trim() || null,
+  };
+  closeModal();
+  try {
+    await goalsApi('updateGoal', body);
+    await loadGoals();
+    renderGoalsTab();
+  } catch (e) { alert(`Update failed: ${e.message}`); }
+}
+
+async function deleteGoal(goalId) {
+  if (!confirm('Delete this goal and all its tasks?')) return;
+  try {
+    await goalsApi('deleteGoal', { id: goalId });
+    await loadGoals();
+    renderGoalsTab();
+  } catch (e) { alert(`Delete failed: ${e.message}`); }
+}
+
+function openAddGoalTaskModal(goalId, section) {
+  modalState = { type: 'addGoalTask', goalId, section };
+  buildGoalTaskModal();
+}
+
+async function openEditGoalTaskModal(taskId, goalId) {
+  try {
+    const { tasks } = await apiRequest('GET', `/api/goals?id=${goalId}`);
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+    modalState = { type: 'editGoalTask', id: taskId, goalId };
+    buildGoalTaskModal(task);
+  } catch (e) { alert(`Couldn't load task: ${e.message}`); }
+}
+
+function buildGoalTaskModal(task = {}) {
+  const staffOpts = [{ id:'', name:'— No owner —' }]
+    .concat(STAFF.filter(s => s.id !== 'shared'))
+    .map(s => `<option value="${s.id}" ${s.id === (task.owner || '') ? 'selected' : ''}>${s.name}</option>`).join('');
+  const statusOpts = ['todo','in-progress','done','issue'].map(v =>
+    `<option value="${v}" ${v === (task.status || 'todo') ? 'selected' : ''}>${STATUS_LABELS[v] || v}</option>`).join('');
+  const isEdit = modalState.type === 'editGoalTask';
+  openModal(`
+    <div class="modal-header"><h3>${isEdit ? 'Edit task' : 'New task'}</h3></div>
+    <div class="modal-body">
+      <div class="form-field"><label>Title</label>
+        <input type="text" id="gt-title" value="${escapeAttr(task.title || '')}"></div>
+      <div class="form-field"><label>Owner</label>
+        <select id="gt-owner">${staffOpts}</select></div>
+      <div class="form-field"><label>Deadline</label>
+        <input type="date" id="gt-deadline" value="${task.deadline || ''}"></div>
+      <div class="form-field"><label>Status</label>
+        <select id="gt-status">${statusOpts}</select></div>
+      <div class="form-field"><label>Notes</label>
+        <textarea id="gt-notes" rows="2">${escapeHtml(task.notes || '')}</textarea></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      ${isEdit ? '<button class="btn btn-danger btn-sm" onclick="deleteGoalTask()">Delete</button>' : ''}
+      <button class="btn btn-primary" onclick="saveGoalTask()">${isEdit ? 'Save' : 'Create'}</button>
+    </div>`);
+}
+
+async function saveGoalTask() {
+  const snap = modalState;
+  const body = {
+    title:    document.getElementById('gt-title').value.trim(),
+    owner:    document.getElementById('gt-owner').value || null,
+    deadline: document.getElementById('gt-deadline').value || null,
+    status:   document.getElementById('gt-status').value,
+    notes:    document.getElementById('gt-notes').value.trim() || null,
+  };
+  if (!body.title) { alert('Title is required.'); return; }
+  closeModal();
+  try {
+    if (snap.type === 'editGoalTask') {
+      await goalsApi('updateGoalTask', { id: snap.id, ...body });
+    } else {
+      await goalsApi('addGoalTask', { goalId: snap.goalId, section: snap.section, ...body });
+    }
+    await afterGoalMutation(snap.goalId);
+  } catch (e) { alert(`Save failed: ${e.message}`); }
+}
+
+async function deleteGoalTask() {
+  const snap = modalState;
+  closeModal();
+  try {
+    await goalsApi('deleteGoalTask', { id: snap.id });
+    await afterGoalMutation(snap.goalId);
+  } catch (e) { alert(`Delete failed: ${e.message}`); }
+}
+
+// After any goal-task mutation, refresh everything that could display the task:
+// the goal detail body (if expanded on the Goals tab), the global goal list,
+// and the current week's bundle (so My Week reflects the change immediately).
+async function afterGoalMutation(goalId) {
+  await Promise.all([
+    refreshExpandedGoal(goalId),
+    loadGoals(),
+    loadWeek(weekKey(currentWeekStart)),
+  ]);
+  if (activeTab === 'goals') {
+    renderGoalsTab();
+    const card = document.getElementById(`goal-card-${goalId}`);
+    if (card) card.classList.add('expanded');
+  } else {
+    renderAll();
+  }
+}
+
+
+// After any task mutation, re-render the affected goal's body so the UI stays
+// in sync without a full-page refetch.
+async function refreshExpandedGoal(goalId) {
+  if (!goalId) return;
+  try {
+    const { tasks } = await apiRequest('GET', `/api/goals?id=${goalId}`);
+    const body = document.getElementById(`goal-body-${goalId}`);
+    if (body) {
+      body.innerHTML = renderGoalBody(goalId, tasks);
+      body.dataset.loaded = 'true';
+    }
+  } catch { /* ignored — full tab re-render runs next */ }
+}
+
+// ── Small formatting + escaping helpers ───────
+
+function fmtLongDate(iso) {
+  if (!iso) return '';
+  const d = new Date(`${iso}T12:00:00`);
+  return `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+}
+
+function fmtShortDate(iso) {
+  if (!iso) return '';
+  const d = new Date(`${iso}T12:00:00`);
+  return `${MONTHS[d.getMonth()]} ${d.getDate()}`;
+}
+
+function daysBetween(fromIso, toIso) {
+  const a = new Date(`${fromIso}T12:00:00Z`);
+  const b = new Date(`${toIso}T12:00:00Z`);
+  return Math.round((b - a) / 86_400_000);
+}
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;' }[c]));
+}
+
+function escapeAttr(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
 }
 
 // ── TASKS TAB ──────────────────────────────────

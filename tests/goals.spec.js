@@ -1,0 +1,152 @@
+import { test, expect } from '@playwright/test';
+import {
+  TEST_WEEK_KEY,
+  TEST_GOAL_MARK,
+  TEST_TARGET_ISO,
+  api,
+  fetchWeek,
+  fetchGoals,
+  goalsApiRaw,
+  wipeTestWeek,
+  wipeTestGoals,
+  autoAcceptPassword,
+  navigateToTestWeek,
+} from './helpers.js';
+
+test.beforeEach(async ({ page }) => {
+  await Promise.all([wipeTestWeek(), wipeTestGoals()]);
+  autoAcceptPassword(page);
+  await page.goto('/');
+  await expect(page.locator('#task-table tbody tr.cat-header').first()).toBeVisible();
+});
+
+test.afterEach(async () => {
+  await wipeTestGoals();
+});
+
+test('goals: create a freeform goal from the UI', async ({ page }) => {
+  await page.locator('button[data-tab="goals"]').click();
+  await expect(page.locator('#tab-goals.active')).toBeVisible();
+
+  await page.getByRole('button', { name: '+ New Goal' }).click();
+  await page.locator('#goal-title').fill(`Freeform ${TEST_GOAL_MARK}`);
+  await page.locator('#goal-target').fill(TEST_TARGET_ISO);
+  await page.getByRole('button', { name: 'Create' }).click();
+
+  await expect(page.locator('.goal-card').filter({ hasText: `Freeform ${TEST_GOAL_MARK}` })).toBeVisible();
+
+  const { goals } = await fetchGoals();
+  const mine = goals.filter(g => g.title.includes(TEST_GOAL_MARK));
+  expect(mine).toHaveLength(1);
+  expect(mine[0].targetDate).toBe(TEST_TARGET_ISO);
+  expect(mine[0].totalTasks).toBe(0);
+});
+
+test('goals: creating a goal from the Campaign Launch template sets correct deadlines', async ({ page }) => {
+  await page.locator('button[data-tab="goals"]').click();
+  await page.getByRole('button', { name: '+ New Goal' }).click();
+
+  await page.locator('#goal-title').fill(`Template ${TEST_GOAL_MARK}`);
+  await page.locator('#goal-target').fill(TEST_TARGET_ISO);          // Mother's Day 2099 — 2099-05-10
+  await page.locator('#goal-template').selectOption({ label: 'Campaign Launch' });
+
+  // Preview should appear once a template is chosen
+  await expect(page.locator('.template-preview')).toBeVisible();
+  await expect(page.locator('.template-preview')).toContainText('Planning');
+
+  await page.getByRole('button', { name: 'Create' }).click();
+
+  const card = page.locator('.goal-card').filter({ hasText: `Template ${TEST_GOAL_MARK}` });
+  await expect(card).toBeVisible();
+  await expect(card).toContainText('45 done');      // "0 / 45 done"
+  await expect(card.locator('.goal-progress-label')).toContainText('0 / 45');
+
+  // Verify Day 1 → target - 13 and Day 14 → target on the server side.
+  const { goals } = await fetchGoals();
+  const goal = goals.find(g => g.title.includes(TEST_GOAL_MARK));
+  expect(goal).toBeDefined();
+  const detailRes = await fetch(`${process.env.BASE_URL}/api/goals?id=${goal.id}`, {
+    headers: { Authorization: `Bearer ${process.env.STUDIO_PASSWORD}` },
+  });
+  const detail = await detailRes.json();
+
+  const day1 = detail.tasks.find(t => t.title.startsWith('Day 1 — Campaign Teaser'));
+  const day14 = detail.tasks.find(t => t.title.startsWith('Day 14 — Last Chance Reminder'));
+  expect(day1.deadline).toBe('2099-04-27');   // 2099-05-10 minus 13 days
+  expect(day14.deadline).toBe(TEST_TARGET_ISO);
+});
+
+test('goals: expanding a card loads its tasks and edit round-trips', async ({ page }) => {
+  // Seed a freeform goal + one task via API so the test focuses on expand/edit UX.
+  const created = await goalsApiRaw('createGoal', {
+    title: `Expand ${TEST_GOAL_MARK}`, targetDate: TEST_TARGET_ISO,
+  });
+  await goalsApiRaw('addGoalTask', {
+    goalId:   created.goal.id,
+    section:  'Planning',
+    title:    'Initial task',
+    status:   'todo',
+  });
+
+  await page.locator('button[data-tab="goals"]').click();
+  const card = page.locator('.goal-card').filter({ hasText: `Expand ${TEST_GOAL_MARK}` });
+
+  await card.locator('.goal-card-head').click();
+  await expect(card).toHaveClass(/expanded/);
+  await expect(card.getByText('Initial task')).toBeVisible();
+
+  // Edit: change status to done
+  await card.getByText('Initial task').click();
+  await page.locator('#gt-status').selectOption('done');
+  await page.getByRole('button', { name: 'Save' }).click();
+
+  await expect(card.getByText('Initial task')).toBeVisible();
+  await expect(card).toContainText('1 / 1 done');
+});
+
+test('goals: deleting a goal removes it from the list', async ({ page }) => {
+  const created = await goalsApiRaw('createGoal', {
+    title: `ToDelete ${TEST_GOAL_MARK}`, targetDate: TEST_TARGET_ISO,
+  });
+
+  await page.locator('button[data-tab="goals"]').click();
+  const card = page.locator('.goal-card').filter({ hasText: `ToDelete ${TEST_GOAL_MARK}` });
+  await card.locator('.goal-card-head').click();
+
+  // confirm() auto-accepted by autoAcceptPassword
+  await card.getByRole('button', { name: 'Delete' }).click();
+
+  await expect(card).not.toBeVisible();
+  const { goals } = await fetchGoals();
+  expect(goals.find(g => g.id === created.goal.id)).toBeUndefined();
+});
+
+test('my week: goal tasks due this week appear for the assigned user', async ({ page }) => {
+  // Create a goal with target in the TEST_WEEK_KEY week, assign a task to Nick
+  // with a deadline inside that week.
+  const created = await goalsApiRaw('createGoal', {
+    title:      `MyWeekGoal ${TEST_GOAL_MARK}`,
+    targetDate: TEST_WEEK_KEY,                 // 2099-01-05
+  });
+  await goalsApiRaw('addGoalTask', {
+    goalId:   created.goal.id,
+    section:  'Planning',
+    title:    `Nick's goal task ${TEST_GOAL_MARK}`,
+    owner:    'nick',
+    deadline: '2099-01-06',                    // Tuesday in the test week
+    status:   'todo',
+  });
+
+  await navigateToTestWeek(page);
+
+  await page.locator('#current-user-select').selectOption('nick');
+  await expect(page.locator('#tab-me.active')).toBeVisible();
+
+  const card = page.locator('.me-card').filter({ hasText: `Nick's goal task ${TEST_GOAL_MARK}` });
+  await expect(card).toBeVisible();
+  await expect(card.locator('.me-card-source')).toHaveText('Goal');
+
+  // Clicking it opens the goal-task edit modal pre-populated with the task
+  await card.click();
+  await expect(page.locator('#gt-title')).toHaveValue(`Nick's goal task ${TEST_GOAL_MARK}`);
+});

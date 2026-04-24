@@ -173,7 +173,12 @@ test('delete class also cascades pieces', async ({ page }) => {
   await expect(page.getByText('Alice')).toBeVisible();
 
   // confirm() dialog is already auto-accepted by autoAcceptPassword in beforeEach.
-  await page.getByRole('button', { name: 'Remove' }).click();
+  // Wait for the delete POST to complete before checking server state.
+  const [deleteRes] = await Promise.all([
+    page.waitForResponse(r => r.url().includes('/api/state') && r.request().method() === 'POST'),
+    page.getByRole('button', { name: 'Remove' }).click(),
+  ]);
+  expect(deleteRes.ok()).toBeTruthy();
 
   await expect(page.getByText('Alice')).not.toBeVisible();
 
