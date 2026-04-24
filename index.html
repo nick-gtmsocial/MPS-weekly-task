@@ -326,46 +326,132 @@ const STAGES = ['Greenware','Post-Process','Bisque','Underglaze','Glaze Fire','D
 
 let currentWeekStart = getMonday(new Date());
 let activeTab = 'tasks';
-let db;
+let db = { weeks: {} };           // in-memory cache of weeks loaded this session
+let loadedWeeks = new Set();      // weeks we've fetched (regardless of emptiness)
 let modalState = null;
 
 // ════════════════════════════════════════════════
-// STORAGE
+// PASSWORD-GATED API CLIENT
+//   All storage goes through /api/state on Vercel.
+//   The browser never sees Supabase credentials.
 // ════════════════════════════════════════════════
 
-function initDB() {
-  try {
-    const raw = localStorage.getItem('mps_studio_v1');
-    db = raw ? JSON.parse(raw) : { weeks:{} };
-  } catch(e) { db = { weeks:{} }; }
+const API_URL = '/api/state';
 
-  // Seed any kilnfire preloaded data into new weeks
-  if (window.KILNFIRE_PRELOADED) {
-    let dirty = false;
-    Object.entries(window.KILNFIRE_PRELOADED).forEach(([k, classes]) => {
-      if (!db.weeks[k]) {
-        db.weeks[k] = { assignments:{}, specialTasks:[], classes };
-        dirty = true;
-      } else if (!db.weeks[k].classes?.length) {
-        db.weeks[k].classes = classes;
-        dirty = true;
-      }
-    });
-    if (dirty) saveDB();
+function getPassword() {
+  let pw = sessionStorage.getItem('mps_pw');
+  while (!pw) {
+    pw = prompt('Enter studio password:');
+    if (pw === null) return null;
+    pw = pw.trim();
+    if (pw) sessionStorage.setItem('mps_pw', pw);
+  }
+  return pw;
+}
+
+async function apiRequest(method, path, body) {
+  const pw = getPassword();
+  if (!pw) throw new Error('No password provided');
+
+  const init = {
+    method,
+    headers: {
+      'Authorization': `Bearer ${pw}`,
+      'Content-Type':  'application/json',
+    },
+  };
+  if (body !== undefined) init.body = JSON.stringify(body);
+
+  const res = await fetch(path, init);
+  if (res.status === 401) {
+    sessionStorage.removeItem('mps_pw');
+    alert('Wrong password — please refresh and try again.');
+    throw new Error('Unauthorized');
+  }
+  if (!res.ok) {
+    const msg = await res.text();
+    throw new Error(`API ${res.status}: ${msg}`);
+  }
+  return res.json();
+}
+
+// Perform a mutation op via the state endpoint.
+// Every mutation handler funnels through this so we only need one fallback path.
+async function api(op, payload = {}) {
+  setSyncStatus('saving');
+  try {
+    const result = await apiRequest('POST', API_URL, { op, ...payload });
+    setSyncStatus('saved');
+    return result;
+  } catch (e) {
+    console.error(`op=${op} failed`, e);
+    setSyncStatus('error', e.message);
+    throw e;
   }
 }
 
-function saveDB() {
-  try { localStorage.setItem('mps_studio_v1', JSON.stringify(db)); } catch(e) { console.error('Save failed',e); }
+function setSyncStatus(state, detail) {
+  const el = document.getElementById('sync-status');
+  if (!el) return;
+  const labels = { live: 'Live', saving: 'Saving…', saved: 'Saved', error: 'Error', offline: 'Not connected' };
+  el.className = `sync-status ${state}`;
+  el.textContent = detail ? `${labels[state]} — ${detail}` : (labels[state] || state);
 }
 
-function getWeek(key) {
+// ════════════════════════════════════════════════
+// STORAGE (Supabase-backed, cached in memory)
+// ════════════════════════════════════════════════
+
+// Ensure a week slot exists in the in-memory cache.
+function ensureWeekSlot(key) {
   if (!db.weeks[key]) db.weeks[key] = { assignments:{}, specialTasks:[], classes:[] };
-  const w = db.weeks[key];
-  if (!w.assignments) w.assignments = {};
-  if (!w.specialTasks) w.specialTasks = [];
-  if (!w.classes) w.classes = [];
-  return w;
+  return db.weeks[key];
+}
+
+// Kept as a sync accessor for rendering. If the week hasn't been loaded yet,
+// caller gets an empty shell — loadWeek() will fill it in shortly after.
+function getWeek(key) { return ensureWeekSlot(key); }
+
+// Fetch one week's state from the server and replace the in-memory slot.
+async function loadWeek(key) {
+  const bundle = await apiRequest('GET', `${API_URL}?week=${key}`);
+  db.weeks[key] = {
+    assignments:  bundle.assignments  || {},
+    specialTasks: bundle.specialTasks  || [],
+    classes:      bundle.classes       || [],
+  };
+  loadedWeeks.add(key);
+  return db.weeks[key];
+}
+
+// Called on first load + whenever the user navigates to a week we haven't fetched.
+async function loadCurrentWeek() {
+  const key = weekKey(currentWeekStart);
+  try {
+    await loadWeek(key);
+    setSyncStatus('live');
+  } catch (e) {
+    setSyncStatus('error', e.message);
+  }
+}
+
+// Historical local-storage data from the pre-Supabase version. If present,
+// download it as a JSON backup and clear so users don't end up editing two copies.
+function migrateLegacyLocalStorage() {
+  try {
+    const raw = localStorage.getItem('mps_studio_v1');
+    if (!raw) return;
+    const blob = new Blob([raw], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `mps-studio-local-backup-${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+    localStorage.removeItem('mps_studio_v1');
+    alert('Found local data from the old version — downloaded as backup and cleared. ' +
+          'Shared storage is now authoritative; if you need to restore data, contact Nick.');
+  } catch (e) {
+    console.error('Legacy migration failed', e);
+  }
 }
 
 // ════════════════════════════════════════════════
@@ -403,11 +489,19 @@ function fmtWeekRange(monday) {
 // NAVIGATION
 // ════════════════════════════════════════════════
 
-function changeWeek(dir) {
+async function changeWeek(dir) {
   const d = new Date(currentWeekStart);
   d.setDate(d.getDate() + dir * 7);
   currentWeekStart = d;
-  renderAll();
+  const key = weekKey(currentWeekStart);
+  if (!loadedWeeks.has(key)) {
+    ensureWeekSlot(key);
+    renderAll();
+    try { await loadWeek(key); setSyncStatus('live'); renderAll(); }
+    catch (e) { setSyncStatus('error', e.message); }
+  } else {
+    renderAll();
+  }
 }
 
 function switchTab(tab) {
@@ -531,7 +625,7 @@ function renderClassesTab() {
     </div>`;
     return;
   }
-  list.innerHTML = week.classes.map((c,i) => buildClassCard(c, i)).join('');
+  list.innerHTML = week.classes.map(c => buildClassCard(c)).join('');
 }
 
 const STAGE_STYLE = {
@@ -541,8 +635,8 @@ const STAGE_STYLE = {
   'Issue':        ['#FEE2E2','#991B1B'],
 };
 
-function buildClassCard(c, idx) {
-  const pieces = (c.pieces||[]).map((p,pi) => {
+function buildClassCard(c) {
+  const pieces = (c.pieces||[]).map(p => {
     const [bg,fg] = STAGE_STYLE[p.stage] || ['#F3F4F6','#374151'];
     return `<tr>
       <td>${p.student||'—'}</td>
@@ -550,8 +644,8 @@ function buildClassCard(c, idx) {
       <td><span class="stage-tag" style="background:${bg};color:${fg}">${p.stage||'Greenware'}</span></td>
       <td>${p.notes||''}</td>
       <td>
-        <button class="icon-btn" onclick="openPieceModal(${idx},${pi})">&#9998;</button>
-        <button class="icon-btn danger" onclick="deletePiece(${idx},${pi})">&#10005;</button>
+        <button class="icon-btn" onclick="openPieceModal('${c.id}','${p.id}')">&#9998;</button>
+        <button class="icon-btn danger" onclick="deletePiece('${c.id}','${p.id}')">&#10005;</button>
       </td>
     </tr>`;
   }).join('');
@@ -571,9 +665,9 @@ function buildClassCard(c, idx) {
       </div>
       <div class="class-actions">
         ${kilnLink}
-        <button class="btn btn-sm btn-primary" onclick="openAddPieceModal(${idx})">+ Piece</button>
-        <button class="btn btn-sm btn-secondary" onclick="openEditClassModal(${idx})">Edit</button>
-        <button class="btn btn-sm btn-danger" onclick="deleteClass(${idx})">Remove</button>
+        <button class="btn btn-sm btn-primary" onclick="openAddPieceModal('${c.id}')">+ Piece</button>
+        <button class="btn btn-sm btn-secondary" onclick="openEditClassModal('${c.id}')">Edit</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteClass('${c.id}')">Remove</button>
       </div>
     </div>
     ${c.pieces?.length ? `
@@ -593,7 +687,7 @@ function renderSpecialTab() {
   document.getElementById('special-grid').innerHTML = STAFF.filter(s => s.id !== 'shared').map(staff => {
     const tasks = week.specialTasks.filter(t => t.staffId === staff.id);
     const canAdd = tasks.length < 3;
-    const cards = tasks.map(t => buildSpecialCard(t, week.specialTasks.indexOf(t))).join('');
+    const cards = tasks.map(t => buildSpecialCard(t)).join('');
 
     return `<div class="staff-card">
       <div class="staff-card-header" style="background:${staff.color}">
@@ -609,7 +703,7 @@ function renderSpecialTab() {
 
 const STATUS_LABELS = { todo:'To Do', 'in-progress':'In Progress', done:'Done', issue:'Issue' };
 
-function buildSpecialCard(task, realIdx) {
+function buildSpecialCard(task) {
   const status = task.status || 'todo';
   const updates = (task.updates||[]).slice(-3).map(u =>
     `<div class="update-line"><strong>${u.date}</strong> — ${u.text}</div>`
@@ -624,9 +718,9 @@ function buildSpecialCard(task, realIdx) {
     </div>
     ${updates ? `<div class="st-updates">${updates}</div>` : ''}
     <div class="st-actions">
-      <button class="btn btn-xs btn-primary" onclick="openUpdateModal(${realIdx})">+ Update</button>
-      <button class="btn btn-xs btn-secondary" onclick="openEditSpecialModal(${realIdx})">Edit</button>
-      <button class="btn btn-xs btn-danger" onclick="deleteSpecialTask(${realIdx})">Remove</button>
+      <button class="btn btn-xs btn-primary" onclick="openUpdateModal('${task.id}')">+ Update</button>
+      <button class="btn btn-xs btn-secondary" onclick="openEditSpecialModal('${task.id}')">Edit</button>
+      <button class="btn btn-xs btn-danger" onclick="deleteSpecialTask('${task.id}')">Remove</button>
     </div>
   </div>`;
 }
@@ -733,24 +827,31 @@ function openCellModal(taskId, dayIndex) {
   `);
 }
 
-function saveCell(taskId, dayIndex) {
+async function saveCell(taskId, dayIndex) {
   const key = weekKey(currentWeekStart);
   const week = getWeek(key);
-  if (!week.assignments[taskId]) week.assignments[taskId] = {};
   const assignees = [...document.querySelectorAll('input[name="assignees"]:checked')].map(i => i.value);
-  week.assignments[taskId][dayIndex] = {
-    assignees,
-    status: document.getElementById('cell-status').value,
-    note:   document.getElementById('cell-note').value,
-  };
-  saveDB(); closeModal(); renderTasksTab();
+  const status    = document.getElementById('cell-status').value;
+  const note      = document.getElementById('cell-note').value;
+
+  if (!week.assignments[taskId]) week.assignments[taskId] = {};
+  week.assignments[taskId][dayIndex] = { assignees, status, note };
+  closeModal(); renderTasksTab();
+
+  try {
+    await api('setAssignment', { weekKey: key, taskId, dayIdx: dayIndex, assignees, status, note });
+  } catch (e) { await loadWeek(key); renderTasksTab(); }
 }
 
-function clearCell(taskId, dayIndex) {
+async function clearCell(taskId, dayIndex) {
   const key = weekKey(currentWeekStart);
   const week = getWeek(key);
   if (week.assignments[taskId]) delete week.assignments[taskId][dayIndex];
-  saveDB(); closeModal(); renderTasksTab();
+  closeModal(); renderTasksTab();
+
+  try {
+    await api('clearAssignment', { weekKey: key, taskId, dayIdx: dayIndex });
+  } catch (e) { await loadWeek(key); renderTasksTab(); }
 }
 
 // Class modals
@@ -759,10 +860,12 @@ function openAddClassModal() {
   openModal(buildClassForm());
 }
 
-function openEditClassModal(idx) {
+function openEditClassModal(id) {
   const week = getWeek(weekKey(currentWeekStart));
-  modalState = { type:'editClass', idx };
-  openModal(buildClassForm(week.classes[idx]));
+  const cls = week.classes.find(c => c.id === id);
+  if (!cls) return;
+  modalState = { type:'editClass', id };
+  openModal(buildClassForm(cls));
 }
 
 function buildClassForm(c={}) {
@@ -791,40 +894,55 @@ function buildClassForm(c={}) {
     </div>`;
 }
 
-function saveClass() {
+async function saveClass() {
   const key = weekKey(currentWeekStart);
   const week = getWeek(key);
-  const cls = {
+  const payload = {
     classNum:     document.getElementById('cls-num').value,
     type:         document.getElementById('cls-type').value,
     date:         document.getElementById('cls-date').value,
     instructor:   document.getElementById('cls-instr').value,
     kilnfireLink: document.getElementById('cls-link').value,
     notes:        document.getElementById('cls-notes').value,
-    pieces: modalState.type === 'editClass' ? (week.classes[modalState.idx].pieces||[]) : [],
   };
-  if (modalState.type === 'editClass') week.classes[modalState.idx] = cls;
-  else week.classes.push(cls);
-  saveDB(); closeModal(); renderClassesTab();
+  closeModal();
+
+  try {
+    if (modalState.type === 'editClass') {
+      const updated = await api('updateClass', { id: modalState.id, ...payload });
+      const i = week.classes.findIndex(c => c.id === modalState.id);
+      if (i >= 0) week.classes[i] = { ...week.classes[i], ...updated };
+    } else {
+      const created = await api('addClass', { weekKey: key, ...payload });
+      week.classes.push({ ...created, pieces: [] });
+    }
+    renderClassesTab();
+  } catch (e) { await loadWeek(key); renderClassesTab(); }
 }
 
-function deleteClass(idx) {
+async function deleteClass(id) {
   if (!confirm('Remove this class?')) return;
-  const week = getWeek(weekKey(currentWeekStart));
-  week.classes.splice(idx,1);
-  saveDB(); renderClassesTab();
+  const key = weekKey(currentWeekStart);
+  const week = getWeek(key);
+  week.classes = week.classes.filter(c => c.id !== id);
+  renderClassesTab();
+  try { await api('deleteClass', { id }); }
+  catch (e) { await loadWeek(key); renderClassesTab(); }
 }
 
 // Piece modals
-function openAddPieceModal(classIdx) {
-  modalState = { type:'addPiece', classIdx };
+function openAddPieceModal(classId) {
+  modalState = { type:'addPiece', classId };
   openModal(buildPieceForm());
 }
 
-function openPieceModal(classIdx, pieceIdx) {
+function openPieceModal(classId, pieceId) {
   const week = getWeek(weekKey(currentWeekStart));
-  modalState = { type:'editPiece', classIdx, pieceIdx };
-  openModal(buildPieceForm(week.classes[classIdx].pieces[pieceIdx]));
+  const cls  = week.classes.find(c => c.id === classId);
+  const piece = cls?.pieces.find(p => p.id === pieceId);
+  if (!piece) return;
+  modalState = { type:'editPiece', classId, pieceId };
+  openModal(buildPieceForm(piece));
 }
 
 function buildPieceForm(p={}) {
@@ -849,24 +967,43 @@ function buildPieceForm(p={}) {
     </div>`;
 }
 
-function savePiece() {
-  const week = getWeek(weekKey(currentWeekStart));
-  const piece = {
+async function savePiece() {
+  const key = weekKey(currentWeekStart);
+  const week = getWeek(key);
+  const payload = {
     student:     document.getElementById('p-student').value,
     description: document.getElementById('p-desc').value,
     stage:       document.getElementById('p-stage').value,
     notes:       document.getElementById('p-notes').value,
   };
-  if (modalState.type === 'editPiece') week.classes[modalState.classIdx].pieces[modalState.pieceIdx] = piece;
-  else week.classes[modalState.classIdx].pieces.push(piece);
-  saveDB(); closeModal(); renderClassesTab();
+  closeModal();
+
+  try {
+    if (modalState.type === 'editPiece') {
+      const updated = await api('updatePiece', { id: modalState.pieceId, ...payload });
+      const cls = week.classes.find(c => c.id === modalState.classId);
+      if (cls) {
+        const i = cls.pieces.findIndex(p => p.id === modalState.pieceId);
+        if (i >= 0) cls.pieces[i] = updated;
+      }
+    } else {
+      const created = await api('addPiece', { classId: modalState.classId, ...payload });
+      const cls = week.classes.find(c => c.id === modalState.classId);
+      if (cls) cls.pieces.push(created);
+    }
+    renderClassesTab();
+  } catch (e) { await loadWeek(key); renderClassesTab(); }
 }
 
-function deletePiece(classIdx, pieceIdx) {
+async function deletePiece(classId, pieceId) {
   if (!confirm('Remove this piece?')) return;
-  const week = getWeek(weekKey(currentWeekStart));
-  week.classes[classIdx].pieces.splice(pieceIdx,1);
-  saveDB(); renderClassesTab();
+  const key = weekKey(currentWeekStart);
+  const week = getWeek(key);
+  const cls  = week.classes.find(c => c.id === classId);
+  if (cls) cls.pieces = cls.pieces.filter(p => p.id !== pieceId);
+  renderClassesTab();
+  try { await api('deletePiece', { id: pieceId }); }
+  catch (e) { await loadWeek(key); renderClassesTab(); }
 }
 
 // Special task modals
@@ -875,10 +1012,12 @@ function openAddSpecialModal(staffId) {
   openModal(buildSpecialForm({ staffId }));
 }
 
-function openEditSpecialModal(idx) {
+function openEditSpecialModal(id) {
   const week = getWeek(weekKey(currentWeekStart));
-  modalState = { type:'editSpecial', idx };
-  openModal(buildSpecialForm(week.specialTasks[idx]));
+  const task = week.specialTasks.find(t => t.id === id);
+  if (!task) return;
+  modalState = { type:'editSpecial', id };
+  openModal(buildSpecialForm(task));
 }
 
 function buildSpecialForm(t={}) {
@@ -902,31 +1041,42 @@ function buildSpecialForm(t={}) {
     </div>`;
 }
 
-function saveSpecialTask() {
+async function saveSpecialTask() {
   const key = weekKey(currentWeekStart);
   const week = getWeek(key);
-  const task = {
-    staffId:  modalState.staffId || week.specialTasks[modalState.idx]?.staffId,
+  const payload = {
     title:    document.getElementById('st-title').value,
     scope:    document.getElementById('st-scope').value,
-    deadline: document.getElementById('st-deadline').value,
+    deadline: document.getElementById('st-deadline').value || null,
     status:   document.getElementById('st-status').value,
-    updates:  modalState.type === 'editSpecial' ? (week.specialTasks[modalState.idx].updates||[]) : [],
   };
-  if (modalState.type === 'editSpecial') week.specialTasks[modalState.idx] = task;
-  else week.specialTasks.push(task);
-  saveDB(); closeModal(); renderSpecialTab();
+  closeModal();
+
+  try {
+    if (modalState.type === 'editSpecial') {
+      const updated = await api('updateSpecialTask', { id: modalState.id, ...payload });
+      const i = week.specialTasks.findIndex(t => t.id === modalState.id);
+      if (i >= 0) week.specialTasks[i] = { ...week.specialTasks[i], ...updated };
+    } else {
+      const created = await api('addSpecialTask', { weekKey: key, staffId: modalState.staffId, ...payload });
+      week.specialTasks.push(created);
+    }
+    renderSpecialTab();
+  } catch (e) { await loadWeek(key); renderSpecialTab(); }
 }
 
-function deleteSpecialTask(idx) {
+async function deleteSpecialTask(id) {
   if (!confirm('Remove this task?')) return;
-  const week = getWeek(weekKey(currentWeekStart));
-  week.specialTasks.splice(idx,1);
-  saveDB(); renderSpecialTab();
+  const key = weekKey(currentWeekStart);
+  const week = getWeek(key);
+  week.specialTasks = week.specialTasks.filter(t => t.id !== id);
+  renderSpecialTab();
+  try { await api('deleteSpecialTask', { id }); }
+  catch (e) { await loadWeek(key); renderSpecialTab(); }
 }
 
-function openUpdateModal(idx) {
-  modalState = { type:'addUpdate', idx };
+function openUpdateModal(id) {
+  modalState = { type:'addUpdate', id };
   openModal(`
     <div class="modal-header"><h3>Add Update</h3></div>
     <div class="modal-body">
@@ -947,17 +1097,27 @@ function openUpdateModal(idx) {
     </div>`);
 }
 
-function saveUpdate() {
-  const week = getWeek(weekKey(currentWeekStart));
-  const task = week.specialTasks[modalState.idx];
+async function saveUpdate() {
+  const key = weekKey(currentWeekStart);
+  const week = getWeek(key);
+  const task = week.specialTasks.find(t => t.id === modalState.id);
+  if (!task) { closeModal(); return; }
   const text = document.getElementById('upd-text').value.trim();
   const newStatus = document.getElementById('upd-status').value;
-  if (text) {
-    if (!task.updates) task.updates = [];
-    task.updates.push({ date: new Date().toLocaleDateString('en-CA'), text });
-  }
-  if (newStatus) task.status = newStatus;
-  saveDB(); closeModal(); renderSpecialTab();
+  closeModal();
+
+  try {
+    if (text) {
+      const update = await api('addSpecialTaskUpdate', { specialTaskId: task.id, text });
+      if (!task.updates) task.updates = [];
+      task.updates.push(update);
+    }
+    if (newStatus && newStatus !== task.status) {
+      await api('updateSpecialTask', { id: task.id, status: newStatus });
+      task.status = newStatus;
+    }
+    renderSpecialTab();
+  } catch (e) { await loadWeek(key); renderSpecialTab(); }
 }
 
 // ════════════════════════════════════════════════
@@ -973,27 +1133,20 @@ function exportJSON() {
 }
 
 function importJSON(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = ev => {
-    try {
-      db = JSON.parse(ev.target.result);
-      saveDB(); renderAll();
-      alert('Data imported successfully!');
-    } catch { alert('Import failed — invalid file format.'); }
-  };
-  reader.readAsText(file);
+  e.target.value = '';
+  alert('Import is disabled in shared-storage mode. To restore a backup, contact Nick — it needs to be loaded into Supabase directly so all devices see it.');
 }
 
 // ════════════════════════════════════════════════
 // INIT
 // ════════════════════════════════════════════════
 
-document.addEventListener('DOMContentLoaded', () => {
-  initDB();
+document.addEventListener('DOMContentLoaded', async () => {
+  migrateLegacyLocalStorage();
   renderLegend();
-  renderAll();
+  renderAll();  // initial render with empty slot so UI is visible
+  await loadCurrentWeek();
+  renderAll();  // re-render with fetched data
 });
 </script>
 </body>

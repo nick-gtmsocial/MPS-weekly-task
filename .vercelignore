@@ -1,0 +1,6 @@
+supabase/
+scripts/
+.github/
+node_modules/
+.env
+.env.*

@@ -1,0 +1,7 @@
+{
+  "name": "mps-weekly-task",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "MPS Studio weekly staff task dashboard (Supabase-backed fork)"
+}
