@@ -4,3 +4,7 @@ scripts/
 node_modules/
 .env
 .env.*
+tests/
+playwright.config.js
+playwright-report/
+test-results/

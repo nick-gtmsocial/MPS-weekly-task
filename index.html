@@ -897,6 +897,7 @@ function buildClassForm(c={}) {
 async function saveClass() {
   const key = weekKey(currentWeekStart);
   const week = getWeek(key);
+  const snap = modalState;                 // closeModal() nulls modalState — capture first
   const payload = {
     classNum:     document.getElementById('cls-num').value,
     type:         document.getElementById('cls-type').value,
@@ -908,9 +909,9 @@ async function saveClass() {
   closeModal();
 
   try {
-    if (modalState.type === 'editClass') {
-      const updated = await api('updateClass', { id: modalState.id, ...payload });
-      const i = week.classes.findIndex(c => c.id === modalState.id);
+    if (snap.type === 'editClass') {
+      const updated = await api('updateClass', { id: snap.id, ...payload });
+      const i = week.classes.findIndex(c => c.id === snap.id);
       if (i >= 0) week.classes[i] = { ...week.classes[i], ...updated };
     } else {
       const created = await api('addClass', { weekKey: key, ...payload });
@@ -970,6 +971,7 @@ function buildPieceForm(p={}) {
 async function savePiece() {
   const key = weekKey(currentWeekStart);
   const week = getWeek(key);
+  const snap = modalState;
   const payload = {
     student:     document.getElementById('p-student').value,
     description: document.getElementById('p-desc').value,
@@ -979,16 +981,16 @@ async function savePiece() {
   closeModal();
 
   try {
-    if (modalState.type === 'editPiece') {
-      const updated = await api('updatePiece', { id: modalState.pieceId, ...payload });
-      const cls = week.classes.find(c => c.id === modalState.classId);
+    if (snap.type === 'editPiece') {
+      const updated = await api('updatePiece', { id: snap.pieceId, ...payload });
+      const cls = week.classes.find(c => c.id === snap.classId);
       if (cls) {
-        const i = cls.pieces.findIndex(p => p.id === modalState.pieceId);
+        const i = cls.pieces.findIndex(p => p.id === snap.pieceId);
         if (i >= 0) cls.pieces[i] = updated;
       }
     } else {
-      const created = await api('addPiece', { classId: modalState.classId, ...payload });
-      const cls = week.classes.find(c => c.id === modalState.classId);
+      const created = await api('addPiece', { classId: snap.classId, ...payload });
+      const cls = week.classes.find(c => c.id === snap.classId);
       if (cls) cls.pieces.push(created);
     }
     renderClassesTab();
@@ -1044,6 +1046,7 @@ function buildSpecialForm(t={}) {
 async function saveSpecialTask() {
   const key = weekKey(currentWeekStart);
   const week = getWeek(key);
+  const snap = modalState;
   const payload = {
     title:    document.getElementById('st-title').value,
     scope:    document.getElementById('st-scope').value,
@@ -1053,12 +1056,12 @@ async function saveSpecialTask() {
   closeModal();
 
   try {
-    if (modalState.type === 'editSpecial') {
-      const updated = await api('updateSpecialTask', { id: modalState.id, ...payload });
-      const i = week.specialTasks.findIndex(t => t.id === modalState.id);
+    if (snap.type === 'editSpecial') {
+      const updated = await api('updateSpecialTask', { id: snap.id, ...payload });
+      const i = week.specialTasks.findIndex(t => t.id === snap.id);
       if (i >= 0) week.specialTasks[i] = { ...week.specialTasks[i], ...updated };
     } else {
-      const created = await api('addSpecialTask', { weekKey: key, staffId: modalState.staffId, ...payload });
+      const created = await api('addSpecialTask', { weekKey: key, staffId: snap.staffId, ...payload });
       week.specialTasks.push(created);
     }
     renderSpecialTab();
@@ -1148,6 +1151,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadCurrentWeek();
   renderAll();  // re-render with fetched data
 });
+
+// Test-only hook so Playwright can jump to an isolated week without
+// clicking the week-nav chevrons hundreds of times.
+window.__jumpToWeek = async (key) => {
+  currentWeekStart = new Date(key + 'T12:00:00');
+  loadedWeeks.delete(key);
+  await loadWeek(key);
+  renderAll();
+};
 </script>
 </body>
 </html>

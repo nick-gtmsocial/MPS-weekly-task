@@ -3,5 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "MPS Studio weekly staff task dashboard (Supabase-backed fork)"
+  "description": "MPS Studio weekly staff task dashboard (Supabase-backed fork)",
+  "scripts": {
+    "test":      "playwright test",
+    "test:ui":   "playwright test --ui",
+    "test:head": "playwright test --headed"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.59.1",
+    "dotenv": "^17.4.2"
+  }
 }
