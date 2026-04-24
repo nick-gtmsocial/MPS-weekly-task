@@ -180,3 +180,72 @@ test('delete class also cascades pieces', async ({ page }) => {
   const bundle = await fetchWeek();
   expect(bundle.classes).toHaveLength(0);
 });
+
+// ── PHASE 2: MY WEEK VIEW ─────────────────────────────────────
+
+test('my week: empty state when no user selected', async ({ page }) => {
+  // beforeEach lands on Weekly Tasks. Click My Week with no user.
+  await page.locator('button[data-tab="me"]').click();
+  await expect(page.locator('#me-content')).toContainText('Pick who you are');
+});
+
+test('my week: selecting a user lands on My Week and filters to their tasks only', async ({ page }) => {
+  // Seed two weekly assignments (one to Nick, one to Cielo) and two special tasks.
+  await api('setAssignment',  { weekKey: TEST_WEEK_KEY, taskId: 'w1', dayIdx: 1, assignees: ['nick'],  status: 'todo' });
+  await api('setAssignment',  { weekKey: TEST_WEEK_KEY, taskId: 'w2', dayIdx: 2, assignees: ['cielo'], status: 'todo' });
+  await api('addSpecialTask', { weekKey: TEST_WEEK_KEY, staffId: 'nick',  title: 'Nick special [TEST]' });
+  await api('addSpecialTask', { weekKey: TEST_WEEK_KEY, staffId: 'cielo', title: 'Cielo special [TEST]' });
+  await navigateToTestWeek(page);
+
+  // Select Nick — should auto-switch to My Week
+  await page.locator('#current-user-select').selectOption('nick');
+  await expect(page.locator('#tab-me.active')).toBeVisible();
+  await expect(page.locator('.me-banner-who')).toContainText('Nick');
+
+  // Nick's items are present
+  await expect(page.locator('#me-content')).toContainText('Nick special');
+  // The weekly task name for 'w1' is "Organize materials and tools"
+  await expect(page.locator('#me-content')).toContainText('Organize materials');
+
+  // Cielo's items are NOT present
+  await expect(page.locator('#me-content')).not.toContainText('Cielo special');
+});
+
+test('my week: selection persists through reload', async ({ page }) => {
+  await page.locator('#current-user-select').selectOption('angel');
+  await expect(page.locator('#tab-me.active')).toBeVisible();
+
+  await page.reload();
+  // Password prompt re-fires on reload — autoAcceptPassword handler from beforeEach is still attached.
+  await expect(page.locator('#tab-me.active')).toBeVisible();
+  await expect(page.locator('#current-user-select')).toHaveValue('angel');
+  await expect(page.locator('.me-banner-who')).toContainText('Angel');
+});
+
+test('my week: overdue bucket surfaces past-due special tasks', async ({ page }) => {
+  await api('addSpecialTask', {
+    weekKey: TEST_WEEK_KEY, staffId: 'nick',
+    title: 'Past due task [TEST]',
+    deadline: '2099-01-01',                 // before the test week's Monday
+    status: 'todo',
+  });
+  await navigateToTestWeek(page);
+
+  await page.locator('#current-user-select').selectOption('nick');
+  await expect(page.locator('[data-section="overdue"]')).toBeVisible();
+  await expect(page.locator('[data-section="overdue"]')).toContainText('Past due task');
+});
+
+test('my week: clicking a special-task card opens its edit modal', async ({ page }) => {
+  const task = await api('addSpecialTask', {
+    weekKey: TEST_WEEK_KEY, staffId: 'nick',
+    title: 'Clickable task [TEST]',
+  });
+  await navigateToTestWeek(page);
+
+  await page.locator('#current-user-select').selectOption('nick');
+  await page.locator('.me-card').filter({ hasText: 'Clickable task' }).click();
+
+  // Modal opens with the task's fields
+  await expect(page.locator('#st-title')).toHaveValue('Clickable task [TEST]');
+});

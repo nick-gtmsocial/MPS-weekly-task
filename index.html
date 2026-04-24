@@ -24,7 +24,46 @@ a:hover{text-decoration:underline}
 .week-nav button{background:rgba(255,255,255,.18);border:none;color:#fff;width:30px;height:30px;border-radius:6px;cursor:pointer;font-size:20px;line-height:1;display:flex;align-items:center;justify-content:center;transition:background .15s}
 .week-nav button:hover{background:rgba(255,255,255,.3)}
 #week-label{font-size:14px;font-weight:600;min-width:210px;text-align:center}
-.header-actions{display:flex;gap:8px}
+.header-actions{display:flex;gap:8px;align-items:center}
+
+/* ── USER SELECTOR ── */
+.user-selector{display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);border-radius:6px;padding:3px 8px}
+.user-selector-label{font-size:11px;font-weight:600;color:rgba(255,255,255,.8);text-transform:uppercase;letter-spacing:.4px}
+.user-selector select{background:transparent;color:#fff;border:none;font-size:12px;font-weight:600;padding:3px 4px;cursor:pointer;appearance:none;-webkit-appearance:none;padding-right:14px;background-image:linear-gradient(45deg,transparent 50%,#fff 50%),linear-gradient(135deg,#fff 50%,transparent 50%);background-position:calc(100% - 8px) 50%,calc(100% - 4px) 50%;background-size:4px 4px,4px 4px;background-repeat:no-repeat}
+.user-selector select option{color:#000}
+
+/* ── MY WEEK ── */
+.me-empty{background:var(--surface);border:1px dashed var(--border);border-radius:10px;padding:40px 24px;text-align:center;color:var(--muted);font-size:13px}
+.me-empty strong{color:var(--text);font-size:15px;display:block;margin-bottom:6px}
+.me-banner{background:var(--surface);border-radius:10px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.me-banner-who{display:flex;align-items:center;gap:10px;font-size:14px}
+.me-banner-chip{width:28px;height:28px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700}
+.me-section{margin-bottom:20px}
+.me-section-header{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+.me-section-header.overdue{color:#DC2626}
+.me-section-header.today{color:var(--teal-dark)}
+.me-section-count{background:#E5E7EB;color:#374151;padding:1px 7px;border-radius:10px;font-size:10px;font-weight:700}
+.me-section-header.overdue .me-section-count{background:#FEE2E2;color:#DC2626}
+.me-section-header.today .me-section-count{background:var(--teal-light);color:var(--teal-dark)}
+.me-card{background:var(--surface);border-radius:8px;padding:10px 14px;border-left:3px solid var(--border);margin-bottom:6px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:box-shadow .15s,transform .05s}
+.me-card:hover{box-shadow:0 2px 6px rgba(0,0,0,.1)}
+.me-card.overdue{border-left-color:#DC2626;background:#FEF2F2}
+.me-card.today{border-left-color:var(--teal)}
+.me-card-source{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:2px 6px;border-radius:4px;flex-shrink:0;min-width:50px;text-align:center}
+.me-card-source.weekly{background:#E0E7FF;color:#3730A3}
+.me-card-source.special{background:#FEF3C7;color:#92400E}
+.me-card-source.goal{background:#F3E8FF;color:#6B21A8}
+.me-card-main{flex:1;min-width:0}
+.me-card-title{font-size:13px;font-weight:600;color:var(--text);margin-bottom:2px}
+.me-card-notes{font-size:11px;color:var(--muted);font-style:italic;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.me-card-meta{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.me-card-day{font-size:11px;font-weight:600;color:var(--muted);background:#F3F4F6;padding:2px 8px;border-radius:4px}
+.me-card-status{font-size:10px;font-weight:600;padding:2px 8px;border-radius:4px;text-transform:uppercase}
+.me-card-status.todo{background:#E5E7EB;color:#374151}
+.me-card-status.in-progress{background:#DBEAFE;color:#1E40AF}
+.me-card-status.done{background:#D1FAE5;color:#065F46}
+.me-card-status.issue{background:#FEE2E2;color:#991B1B}
+.me-card-status.skipped{background:#F3F4F6;color:#6B7280}
 
 /* ── LEGEND ── */
 .legend-bar{background:var(--surface);border-bottom:1px solid var(--border);padding:8px 24px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:12px}
@@ -178,6 +217,10 @@ a:hover{text-decoration:underline}
     <button onclick="changeWeek(1)" title="Next week">&#8250;</button>
   </div>
   <div class="header-actions">
+    <div class="user-selector">
+      <span class="user-selector-label">You:</span>
+      <select id="current-user-select" onchange="setCurrentUser(this.value)"></select>
+    </div>
     <button class="btn btn-outline btn-sm" onclick="exportJSON()">Export</button>
     <label class="btn btn-outline btn-sm" style="cursor:pointer">Import<input type="file" accept=".json" onchange="importJSON(event)" hidden></label>
   </div>
@@ -191,7 +234,8 @@ a:hover{text-decoration:underline}
 
 <!-- ── TABS ── -->
 <nav class="tabs">
-  <button class="tab-btn active" data-tab="tasks" onclick="switchTab('tasks')">Weekly Tasks</button>
+  <button class="tab-btn" data-tab="me"      onclick="switchTab('me')">My Week</button>
+  <button class="tab-btn active" data-tab="tasks"   onclick="switchTab('tasks')">Weekly Tasks</button>
   <button class="tab-btn" data-tab="classes" onclick="switchTab('classes')">Classes</button>
   <button class="tab-btn" data-tab="special" onclick="switchTab('special')">Special Tasks</button>
   <button class="tab-btn" data-tab="history" onclick="switchTab('history')">History</button>
@@ -199,6 +243,11 @@ a:hover{text-decoration:underline}
 
 <!-- ── MAIN CONTENT ── -->
 <main class="main-content">
+
+  <!-- MY WEEK -->
+  <div id="tab-me" class="tab-panel">
+    <div id="me-content"></div>
+  </div>
 
   <!-- TASKS -->
   <div id="tab-tasks" class="tab-panel active">
@@ -329,6 +378,7 @@ let activeTab = 'tasks';
 let db = { weeks: {} };           // in-memory cache of weeks loaded this session
 let loadedWeeks = new Set();      // weeks we've fetched (regardless of emptiness)
 let modalState = null;
+let currentUser = null;           // staff.id — persisted in localStorage per device
 
 // ════════════════════════════════════════════════
 // PASSWORD-GATED API CLIENT
@@ -521,6 +571,7 @@ function renderAll() {
 }
 
 function renderTabContent(tab) {
+  if (tab === 'me')      renderMyWeekTab();
   if (tab === 'tasks')   renderTasksTab();
   if (tab === 'classes') renderClassesTab();
   if (tab === 'special') renderSpecialTab();
@@ -534,6 +585,148 @@ function renderLegend() {
       ${s.name}
     </span>`
   ).join('');
+}
+
+// ── USER SELECTOR ──────────────────────────────
+
+function renderUserSelector() {
+  const sel = document.getElementById('current-user-select');
+  sel.innerHTML = '<option value="">— Select —</option>' +
+    STAFF.filter(s => s.id !== 'shared').map(s =>
+      `<option value="${s.id}" ${s.id === currentUser ? 'selected' : ''}>${s.name}</option>`
+    ).join('');
+}
+
+function setCurrentUser(id) {
+  currentUser = id || null;
+  if (currentUser) localStorage.setItem('mps_current_user', currentUser);
+  else             localStorage.removeItem('mps_current_user');
+  renderUserSelector();
+  if (currentUser) switchTab('me');      // land on personal view once we know who they are
+  else             renderAll();
+}
+
+function initCurrentUser() {
+  const stored = localStorage.getItem('mps_current_user');
+  currentUser = (stored && STAFF.find(s => s.id === stored)) ? stored : null;
+}
+
+// ── MY WEEK TAB ────────────────────────────────
+
+function renderMyWeekTab() {
+  const host = document.getElementById('me-content');
+
+  if (!currentUser) {
+    host.innerHTML = `
+      <div class="me-empty">
+        <strong>Pick who you are</strong>
+        Use the <em>You:</em> selector in the top-right to see your personal week.
+      </div>`;
+    return;
+  }
+
+  const staff         = STAFF.find(s => s.id === currentUser);
+  const key           = weekKey(currentWeekStart);
+  const week          = getWeek(key);
+  const dates         = getWeekDates(currentWeekStart);
+  const todayIso      = new Date().toISOString().slice(0, 10);
+  const thisMondayIso = weekKey(getMonday(new Date()));
+  const isCurrentWeek = key === thisMondayIso;
+  // When viewing the current week, "overdue" is measured against today's date.
+  // When viewing another week, "overdue" means the item was due before the
+  // viewed week started — otherwise every item for a future week would be
+  // future-dated and the overdue bucket would be permanently empty.
+  const referenceIso  = isCurrentWeek ? todayIso : key;
+
+  // Collect every task assigned to this user (weekly cells + special tasks).
+  const myItems = [];
+
+  for (const taskId of Object.keys(week.assignments || {})) {
+    for (const [dayIdxStr, cell] of Object.entries(week.assignments[taskId])) {
+      if (!cell.assignees?.includes(currentUser)) continue;
+      const task   = TASKS.find(t => t.id === taskId);
+      if (!task) continue;
+      const dayIdx = Number(dayIdxStr);
+      const date   = dates[dayIdx];
+      myItems.push({
+        source:   'weekly',
+        title:    task.name,
+        notes:    task.notes || cell.note || '',
+        status:   cell.status || 'todo',
+        dateIso:  date.toISOString().slice(0, 10),
+        dayLabel: `${DAYS[dayIdx]} ${date.getDate()}`,
+        onClick:  `openCellModal('${taskId}', ${dayIdx})`,
+      });
+    }
+  }
+
+  for (const t of week.specialTasks || []) {
+    if (t.staffId !== currentUser) continue;
+    myItems.push({
+      source:   'special',
+      title:    t.title,
+      notes:    t.scope || '',
+      status:   t.status || 'todo',
+      dateIso:  t.deadline || null,
+      dayLabel: t.deadline ? `Due ${t.deadline}` : '',
+      onClick:  `openEditSpecialModal('${t.id}')`,
+    });
+  }
+
+  // Bucket. Overdue = past + not done. Today only shows when viewing the current week.
+  const overdue = myItems.filter(i => i.dateIso && i.dateIso <  referenceIso && i.status !== 'done');
+  const today   = isCurrentWeek
+    ? myItems.filter(i => i.dateIso === todayIso && i.status !== 'done' && !overdue.includes(i))
+    : [];
+  const rest    = myItems.filter(i => !overdue.includes(i) && !today.includes(i));
+
+  const renderCard = (item, cls) =>
+    `<div class="me-card ${cls}" onclick="${item.onClick}">
+      <span class="me-card-source ${item.source}">${item.source === 'weekly' ? 'Weekly' : 'Special'}</span>
+      <div class="me-card-main">
+        <div class="me-card-title">${item.title}</div>
+        ${item.notes ? `<div class="me-card-notes">${item.notes}</div>` : ''}
+      </div>
+      <div class="me-card-meta">
+        ${item.dayLabel ? `<span class="me-card-day">${item.dayLabel}</span>` : ''}
+        <span class="me-card-status ${item.status}">${STATUS_LABELS[item.status] || item.status}</span>
+      </div>
+    </div>`;
+
+  const html = [
+    `<div class="me-banner">
+       <div class="me-banner-who">
+         <span class="me-banner-chip" style="background:${staff.color}">${staff.initial}</span>
+         <span>Showing <strong>${staff.name}</strong>'s tasks for ${fmtWeekRange(currentWeekStart)}</span>
+       </div>
+     </div>`,
+  ];
+
+  if (overdue.length) html.push(
+    `<div class="me-section" data-section="overdue">
+      <div class="me-section-header overdue">⚠ Overdue <span class="me-section-count">${overdue.length}</span></div>
+      ${overdue.map(i => renderCard(i, 'overdue')).join('')}
+    </div>`);
+
+  if (today.length) html.push(
+    `<div class="me-section" data-section="today">
+      <div class="me-section-header today">Today <span class="me-section-count">${today.length}</span></div>
+      ${today.map(i => renderCard(i, 'today')).join('')}
+    </div>`);
+
+  if (rest.length) html.push(
+    `<div class="me-section" data-section="rest">
+      <div class="me-section-header">This week <span class="me-section-count">${rest.length}</span></div>
+      ${rest.map(i => renderCard(i, '')).join('')}
+    </div>`);
+
+  if (!overdue.length && !today.length && !rest.length) html.push(
+    `<div class="me-empty">
+      <strong>No tasks assigned to ${staff.name} this week</strong>
+      Head to <em>Weekly Tasks</em> or <em>Special Tasks</em> to assign some.
+    </div>`);
+
+  host.innerHTML = html.join('');
 }
 
 // ── TASKS TAB ──────────────────────────────────
@@ -1146,11 +1339,24 @@ function importJSON(e) {
 
 document.addEventListener('DOMContentLoaded', async () => {
   migrateLegacyLocalStorage();
+  initCurrentUser();
   renderLegend();
-  renderAll();  // initial render with empty slot so UI is visible
+  renderUserSelector();
+  if (currentUser) activeTab = 'me';        // users land on their personal view
+  syncTabButtons();
+  renderAll();                              // initial render with empty slot so UI is visible
   await loadCurrentWeek();
-  renderAll();  // re-render with fetched data
+  renderAll();                              // re-render with fetched data
 });
+
+// Keep the tab-button highlight in sync with activeTab; used when we flip the
+// default tab before any user interaction.
+function syncTabButtons() {
+  document.querySelectorAll('.tab-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.tab === activeTab));
+  document.querySelectorAll('.tab-panel').forEach(p =>
+    p.classList.toggle('active', p.id === `tab-${activeTab}`));
+}
 
 // Test-only hook so Playwright can jump to an isolated week without
 // clicking the week-nav chevrons hundreds of times.
