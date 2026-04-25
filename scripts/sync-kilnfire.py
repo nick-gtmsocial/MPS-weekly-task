@@ -163,6 +163,19 @@ def main():
     csv_text = csv_text.replace('\r\n', '\n').replace('\r', '\n')
     classes = list(csv.DictReader(io.StringIO(csv_text)))
     print(f"Total classes in payload: {len(classes)}")
+    if classes:
+        # Diagnostic: show end-date range to confirm what slice the export covers.
+        ends = sorted([
+            parse_kf_date(c.get("End Date") or c.get("end_date") or "")
+            for c in classes
+        ], key=lambda d: d or datetime.date.min)
+        ends = [d for d in ends if d]
+        if ends:
+            print(f"  end-date range: {ends[0]} … {ends[-1]} ({len(ends)} parseable / {len(classes)} total)")
+        # Sample first row keys + values for visibility
+        sample = classes[0]
+        print(f"  sample row keys: {list(sample.keys())[:10]}")
+        print(f"  sample End Date='{sample.get('End Date')}', Status='{sample.get('Status')}'")
 
     # ── Filter past N days, status finished, mappable template ──
     cutoff = datetime.date.today() - datetime.timedelta(days=args.since)
