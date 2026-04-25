@@ -78,6 +78,27 @@ a:hover{text-decoration:underline}
 .me-section-header.done{color:#065F46}
 .me-section-header.done .me-section-count{background:#D1FAE5;color:#065F46}
 
+/* ── PLANNER ── */
+.planner-toolbar{background:var(--surface);border-radius:8px;padding:10px 12px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.planner-chip-row{display:flex;gap:6px;flex-wrap:wrap}
+.planner-chip{background:#F3F4F6;border:1px solid var(--border);color:var(--text);font-size:12px;font-weight:600;padding:5px 10px;border-radius:14px;cursor:pointer;transition:all .15s}
+.planner-chip:hover{border-color:var(--teal);color:var(--teal)}
+.planner-chip.active{background:var(--teal);color:#fff;border-color:var(--teal)}
+.planner-done-toggle{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);cursor:pointer;user-select:none}
+.planner-done-toggle input{cursor:pointer}
+.planner-day{background:var(--surface);border-radius:10px;margin-bottom:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.planner-day-head{background:#F3F4F6;padding:8px 14px;font-size:12px;font-weight:700;color:var(--teal-dark);text-transform:uppercase;letter-spacing:.5px;display:flex;justify-content:space-between;align-items:center}
+.planner-day-count{background:#fff;color:var(--muted);padding:1px 8px;border-radius:10px;font-size:10px}
+.planner-row{display:grid;grid-template-columns:auto 1fr auto auto auto auto;gap:10px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border);font-size:13px}
+.planner-row:last-child{border-bottom:none}
+.planner-row.is-done{opacity:.55}
+.planner-row.is-done .planner-row-title{text-decoration:line-through;color:var(--muted)}
+.planner-row-main{min-width:0}
+.planner-row-title{font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.planner-row-notes{font-size:11px;color:var(--muted);font-style:italic;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.planner-owner{font-size:11px;font-weight:600;padding:4px 8px;border:1px solid var(--border);border-radius:5px;background:#fff;cursor:pointer;color:var(--text);min-width:90px}
+.planner-owner:hover{border-color:var(--teal)}
+
 /* ── GOALS TAB ── */
 .goal-card{background:var(--surface);border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.08);margin-bottom:12px;overflow:hidden}
 .goal-card-head{padding:14px 18px;display:grid;grid-template-columns:1fr auto auto;gap:14px;align-items:center;cursor:pointer}
@@ -302,12 +323,13 @@ a:hover{text-decoration:underline}
 
 <!-- ── TABS ── -->
 <nav class="tabs">
-  <button class="tab-btn" data-tab="me"      onclick="switchTab('me')">My Week</button>
+  <button class="tab-btn" data-tab="me"       onclick="switchTab('me')">My Week</button>
+  <button class="tab-btn" data-tab="planner"  onclick="switchTab('planner')">Planner</button>
   <button class="tab-btn active" data-tab="tasks"   onclick="switchTab('tasks')">Weekly Tasks</button>
-  <button class="tab-btn" data-tab="classes" onclick="switchTab('classes')">Classes</button>
-  <button class="tab-btn" data-tab="special" onclick="switchTab('special')">Special Tasks</button>
-  <button class="tab-btn" data-tab="goals"   onclick="switchTab('goals')">Goals</button>
-  <button class="tab-btn" data-tab="history" onclick="switchTab('history')">History</button>
+  <button class="tab-btn" data-tab="classes"  onclick="switchTab('classes')">Classes</button>
+  <button class="tab-btn" data-tab="special"  onclick="switchTab('special')">Special Tasks</button>
+  <button class="tab-btn" data-tab="goals"    onclick="switchTab('goals')">Goals</button>
+  <button class="tab-btn" data-tab="history"  onclick="switchTab('history')">History</button>
 </nav>
 
 <!-- ── MAIN CONTENT ── -->
@@ -316,6 +338,18 @@ a:hover{text-decoration:underline}
   <!-- MY WEEK -->
   <div id="tab-me" class="tab-panel">
     <div id="me-content"></div>
+  </div>
+
+  <!-- PLANNER -->
+  <div id="tab-planner" class="tab-panel">
+    <div class="section-top">
+      <div>
+        <h2>Planner</h2>
+        <p class="help-text">All auto-generated tasks for this week, grouped by day. Click an owner chip to reassign. Click ✓ to mark done.</p>
+      </div>
+    </div>
+    <div id="planner-toolbar"></div>
+    <div id="planner-content"></div>
   </div>
 
   <!-- TASKS -->
@@ -678,12 +712,13 @@ function renderAll() {
 }
 
 function renderTabContent(tab) {
-  if (tab === 'me')      renderMyWeekTab();
-  if (tab === 'tasks')   renderTasksTab();
-  if (tab === 'classes') renderClassesTab();
-  if (tab === 'special') renderSpecialTab();
-  if (tab === 'goals')   renderGoalsTabAsync();
-  if (tab === 'history') renderHistoryTab();
+  if (tab === 'me')       renderMyWeekTab();
+  if (tab === 'planner')  renderPlannerTab();
+  if (tab === 'tasks')    renderTasksTab();
+  if (tab === 'classes')  renderClassesTab();
+  if (tab === 'special')  renderSpecialTab();
+  if (tab === 'goals')    renderGoalsTabAsync();
+  if (tab === 'history')  renderHistoryTab();
 }
 
 // Lazy-load goals on first visit to the tab, then re-render.
@@ -913,6 +948,117 @@ function renderMyWeekTab() {
     </div>`);
 
   host.innerHTML = html.join('');
+}
+
+// ── PLANNER TAB ────────────────────────────────
+
+// Manager view: every auto-generated weekly_task for the current week,
+// grouped by day, with inline owner picker + ✓ done toggle. Filters
+// by staff and "show done" persist in localStorage so a refresh doesn't
+// reset the view.
+
+let plannerFilter = {
+  staff: localStorage.getItem('mps_planner_staff') || '',     // '' = all
+  showDone: localStorage.getItem('mps_planner_done') === 'true',
+};
+
+function setPlannerFilter(patch) {
+  plannerFilter = { ...plannerFilter, ...patch };
+  localStorage.setItem('mps_planner_staff', plannerFilter.staff);
+  localStorage.setItem('mps_planner_done',  String(plannerFilter.showDone));
+  renderPlannerTab();
+}
+
+function renderPlannerTab() {
+  const key  = weekKey(currentWeekStart);
+  const week = getWeek(key);
+  const dates = getWeekDates(currentWeekStart);
+
+  // Toolbar — staff filter + show-done toggle
+  const staffPills = ['', ...STAFF.map(s => s.id)].map(id => {
+    const active = plannerFilter.staff === id;
+    const label  = id ? STAFF.find(s => s.id === id).name : 'All staff';
+    return `<button class="planner-chip ${active ? 'active' : ''}" onclick="setPlannerFilter({staff: ${JSON.stringify(id)}})">${label}</button>`;
+  }).join('');
+
+  document.getElementById('planner-toolbar').innerHTML = `
+    <div class="planner-toolbar">
+      <div class="planner-chip-row">${staffPills}</div>
+      <label class="planner-done-toggle">
+        <input type="checkbox" ${plannerFilter.showDone ? 'checked' : ''} onchange="setPlannerFilter({showDone: this.checked})">
+        Show done
+      </label>
+    </div>`;
+
+  // Filter + bucket tasks by due_date
+  const all = (week.weeklyTasks || []).filter(t => {
+    if (t.sourceKind === 'goal' || t.sourceKind === 'special') return false;
+    if (!plannerFilter.showDone && t.status === 'done') return false;
+    if (plannerFilter.staff && t.assignee !== plannerFilter.staff) return false;
+    return true;
+  });
+
+  const host = document.getElementById('planner-content');
+  if (!all.length) {
+    host.innerHTML = `<div class="empty-state"><div class="empty-icon">No tasks match this filter</div><p>Try clearing the staff filter or toggling Show done.</p></div>`;
+    return;
+  }
+
+  const byDay = new Map();
+  for (const t of all) {
+    const d = t.dueDate || key;
+    if (!byDay.has(d)) byDay.set(d, []);
+    byDay.get(d).push(t);
+  }
+  const sortedDays = [...byDay.keys()].sort();
+
+  const html = sortedDays.map(d => {
+    const dayDate = new Date(`${d}T12:00:00Z`);
+    const dayLabel = `${DAYS[(dayDate.getUTCDay() + 6) % 7]} · ${MONTHS[dayDate.getUTCMonth()]} ${dayDate.getUTCDate()}`;
+    return `
+      <div class="planner-day">
+        <div class="planner-day-head">${dayLabel}<span class="planner-day-count">${byDay.get(d).length}</span></div>
+        ${byDay.get(d).map(renderPlannerRow).join('')}
+      </div>`;
+  }).join('');
+
+  host.innerHTML = html;
+}
+
+function renderPlannerRow(t) {
+  const isDone = t.status === 'done';
+  const classLabel = t.classType ? ` · ${t.classType}` : '';
+  const batchPill  = t.batchKey ? `<span class="me-card-batch">batch</span>` : '';
+  const sourceCls  = t.sourceKind === 'recurring' ? 'recurring' : 'task';
+  const sourceText = t.sourceKind === 'recurring' ? 'Chore' : 'Task';
+
+  // Owner select — change → assignWeeklyTask op. Built as a real <select>
+  // so users get the OS picker on mobile, not a custom modal.
+  const opts = ['<option value="">— unassigned —</option>']
+    .concat(STAFF.map(s => `<option value="${s.id}" ${t.assignee === s.id ? 'selected' : ''}>${s.name}</option>`))
+    .join('');
+
+  return `
+    <div class="planner-row ${isDone ? 'is-done' : ''}">
+      <span class="me-card-source ${sourceCls}">${sourceText}</span>
+      <div class="planner-row-main">
+        <div class="planner-row-title">${t.title}${classLabel}</div>
+        ${t.notes ? `<div class="planner-row-notes">${t.notes}</div>` : ''}
+      </div>
+      ${batchPill}
+      <select class="planner-owner" onchange="assignPlannerTask('${t.id}', this.value)">${opts}</select>
+      <span class="me-card-status ${t.status}">${STATUS_LABELS[t.status] || t.status}</span>
+      <button class="me-card-done ${isDone ? 'is-done' : ''}" title="${isDone ? 'Un-mark done' : 'Mark done'}"
+              onclick="toggleWeeklyTaskDone('${t.id}', '${t.status}', this)">✓</button>
+    </div>`;
+}
+
+async function assignPlannerTask(id, assignee) {
+  try {
+    await api('assignWeeklyTask', { id, assignee: assignee || null });
+    await loadWeek(weekKey(currentWeekStart));
+    renderPlannerTab();
+  } catch (e) { alert(`Couldn't reassign: ${e.message}`); }
 }
 
 // ── GOALS TAB ──────────────────────────────────
