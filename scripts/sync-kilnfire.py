@@ -23,7 +23,7 @@ from pathlib import Path
 
 # Allow importing the local kilnfire package
 sys.path.insert(0, str(Path(__file__).parent))
-from kilnfire.client import login_session, fetch_planning_csv  # noqa: E402
+from kilnfire.client import login_session, fetch_planning_rows  # noqa: E402
 
 import requests
 
@@ -76,13 +76,17 @@ def parse_fill(fill: str) -> int:
     return int(m.group(1)) if m else 0
 
 
-def parse_kf_date(s: str) -> datetime.date | None:
-    """Kilnfire's CSV uses M/D/YYYY (or D/M/YYYY?). Try a few formats."""
+def parse_kf_date(s) -> datetime.date | None:
+    """Parse a Kilnfire date. Works with both strings (from CSV: M/D/YYYY
+    or YYYY-MM-DD) and datetime objects (from openpyxl when reading XLSX)."""
     if not s:
         return None
+    if isinstance(s, datetime.date):                           # date or datetime
+        return s.date() if isinstance(s, datetime.datetime) else s
+    s = str(s).strip()
     for fmt in ("%m/%d/%Y", "%d/%m/%Y", "%Y-%m-%d"):
         try:
-            return datetime.datetime.strptime(s.strip(), fmt).date()
+            return datetime.datetime.strptime(s, fmt).date()
         except ValueError:
             continue
     return None
@@ -143,25 +147,19 @@ def main():
         print("BASE_URL and STUDIO_PASSWORD must be set (env or --base-url/--password).")
         sys.exit(2)
 
-    # ── Pull planning payload as CSV (the /export endpoint is stable —
-    # the JSON /planning/data endpoint sometimes 500s) ──
+    # ── Pull planning payload (Kilnfire returns XLSX from the /export
+    # endpoint; client handles both XLSX and CSV transparently) ──
     if args.mock:
         with open(args.mock) as f:
-            csv_text = f.read()
-        print(f"Loaded mock planning CSV from {args.mock}")
+            classes = list(csv.DictReader(io.StringIO(f.read())))
+        print(f"Loaded mock planning data from {args.mock}")
     else:
         if not all(k in os.environ for k in ("KILNFIRE_URL", "KILNFIRE_USER", "KILNFIRE_PASS")):
             print("KILNFIRE_URL / KILNFIRE_USER / KILNFIRE_PASS must be set for live scrape.")
             sys.exit(2)
         session, token, base = login_session()
-        csv_text = fetch_planning_csv(session, token, base)
-        print(f"Fetched planning CSV from {base} ({len(csv_text)} bytes)")
-
-    # Kilnfire's export uses \r\n. csv.DictReader through io.StringIO can
-    # misread CRLF as embedded newlines in unquoted fields — normalise
-    # all line endings to \n first.
-    csv_text = csv_text.replace('\r\n', '\n').replace('\r', '\n')
-    classes = list(csv.DictReader(io.StringIO(csv_text)))
+        classes = fetch_planning_rows(session, token, base)
+        print(f"Fetched planning data from {base}")
     print(f"Total classes in payload: {len(classes)}")
     if classes:
         # Diagnostic: show end-date range to confirm what slice the export covers.
