@@ -157,6 +157,10 @@ def main():
         csv_text = fetch_planning_csv(session, token, base)
         print(f"Fetched planning CSV from {base} ({len(csv_text)} bytes)")
 
+    # Kilnfire's export uses \r\n. csv.DictReader through io.StringIO can
+    # misread CRLF as embedded newlines in unquoted fields — normalise
+    # all line endings to \n first.
+    csv_text = csv_text.replace('\r\n', '\n').replace('\r', '\n')
     classes = list(csv.DictReader(io.StringIO(csv_text)))
     print(f"Total classes in payload: {len(classes)}")
 
