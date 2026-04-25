@@ -66,11 +66,17 @@ a:hover{text-decoration:underline}
 .me-card-status.done{background:#D1FAE5;color:#065F46}
 .me-card-status.issue{background:#FEE2E2;color:#991B1B}
 .me-card-status.skipped{background:#F3F4F6;color:#6B7280}
-.me-card-done{background:var(--teal);color:#fff;border:none;border-radius:6px;width:30px;height:30px;font-size:16px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:transform .1s,background .15s;flex-shrink:0}
-.me-card-done:hover{background:var(--teal-dark);transform:scale(1.08)}
+.me-card-done{background:#fff;color:var(--muted);border:2px solid var(--border);border-radius:6px;width:30px;height:30px;font-size:14px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all .15s;flex-shrink:0}
+.me-card-done:hover{border-color:var(--teal);color:var(--teal);transform:scale(1.08)}
+.me-card-done.is-done{background:var(--teal);color:#fff;border-color:var(--teal)}
+.me-card-done.is-done:hover{background:var(--teal-dark);border-color:var(--teal-dark)}
 .me-card-done:active{transform:scale(0.95)}
 .me-card-batch{font-size:9px;font-weight:700;background:#FEF3C7;color:#92400E;padding:2px 6px;border-radius:3px;text-transform:uppercase;letter-spacing:.4px}
 .me-card-fading{opacity:.3;transition:opacity .25s}
+.me-card.is-done{opacity:.55}
+.me-card.is-done .me-card-title{text-decoration:line-through;color:var(--muted)}
+.me-section-header.done{color:#065F46}
+.me-section-header.done .me-section-count{background:#D1FAE5;color:#065F46}
 
 /* ── GOALS TAB ── */
 .goal-card{background:var(--surface);border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.08);margin-bottom:12px;overflow:hidden}
@@ -808,7 +814,6 @@ function renderMyWeekTab() {
   for (const t of week.weeklyTasks || []) {
     if (t.assignee !== currentUser) continue;
     if (t.sourceKind === 'goal' || t.sourceKind === 'special') continue;
-    if (t.status === 'done') continue;            // hide completed work from the queue
     const classLabel = t.classType
       ? ` · ${t.classType}${t.classDate ? ' · ' + fmtShortDate(t.classDate) : ''}`
       : '';
@@ -824,12 +829,16 @@ function renderMyWeekTab() {
     });
   }
 
-  // Bucket. Overdue = past + not done. Today only shows when viewing the current week.
-  const overdue = myItems.filter(i => i.dateIso && i.dateIso <  referenceIso && i.status !== 'done');
+  // Buckets. Done items get their own collapsed section at the bottom so
+  // staff see confirmation of what they finished without it cluttering
+  // the active queue.
+  const done    = myItems.filter(i => i.status === 'done');
+  const open    = myItems.filter(i => i.status !== 'done');
+  const overdue = open.filter(i => i.dateIso && i.dateIso <  referenceIso);
   const today   = isCurrentWeek
-    ? myItems.filter(i => i.dateIso === todayIso && i.status !== 'done' && !overdue.includes(i))
+    ? open.filter(i => i.dateIso === todayIso && !overdue.includes(i))
     : [];
-  const rest    = myItems.filter(i => !overdue.includes(i) && !today.includes(i));
+  const rest    = open.filter(i => !overdue.includes(i) && !today.includes(i));
 
   const sourceLabel = s =>
     s === 'weekly'    ? 'Weekly'  :
@@ -842,11 +851,14 @@ function renderMyWeekTab() {
     // Auto-generated weekly tasks (task/recurring) get an inline Done
     // button. Goal/special items keep their modal click behaviour.
     const cardOnClick = item.doneId ? '' : (item.onClick ? `onclick="${item.onClick}"` : '');
+    // The button toggles status both ways: todo → done → todo. The
+    // current item.status determines the next state and the visual.
+    const isDone = item.status === 'done';
     const doneBtn = item.doneId
-      ? `<button class="me-card-done" title="Mark done" onclick="event.stopPropagation(); markWeeklyTaskDoneInline('${item.doneId}', this)">✓</button>`
+      ? `<button class="me-card-done ${isDone ? 'is-done' : ''}" title="${isDone ? 'Un-mark done' : 'Mark done'}" onclick="event.stopPropagation(); toggleWeeklyTaskDone('${item.doneId}', '${item.status}', this)">✓</button>`
       : '';
     const batchPill = item.batched ? `<span class="me-card-batch">batch</span>` : '';
-    return `<div class="me-card ${cls}" ${cardOnClick}>
+    return `<div class="me-card ${cls} ${isDone ? 'is-done' : ''}" ${cardOnClick}>
       <span class="me-card-source ${item.source}">${sourceLabel(item.source)}</span>
       <div class="me-card-main">
         <div class="me-card-title">${item.title}</div>
@@ -888,7 +900,13 @@ function renderMyWeekTab() {
       ${rest.map(i => renderCard(i, '')).join('')}
     </div>`);
 
-  if (!overdue.length && !today.length && !rest.length) html.push(
+  if (done.length) html.push(
+    `<div class="me-section" data-section="done">
+      <div class="me-section-header done">✓ Done <span class="me-section-count">${done.length}</span></div>
+      ${done.map(i => renderCard(i, 'done')).join('')}
+    </div>`);
+
+  if (!overdue.length && !today.length && !rest.length && !done.length) html.push(
     `<div class="me-empty">
       <strong>No tasks assigned to ${staff.name} this week</strong>
       Head to <em>Weekly Tasks</em> or <em>Special Tasks</em> to assign some.
@@ -1347,19 +1365,20 @@ async function refreshExpandedGoal(goalId) {
 
 // ── Weekly tasks (auto-generated) ────────────
 
-// Inline Done button on a weekly_task card. No confirm dialog — staff
-// tap the ✓ once, the card fades out, the API call runs in the
-// background. On error, the card flips back and the user sees an alert.
-async function markWeeklyTaskDoneInline(id, btnEl) {
+// Inline ✓ button on a weekly_task card. Toggles status both ways —
+// todo → done, done → todo — so staff can un-check if they tap it by
+// mistake or want to reopen the task.
+async function toggleWeeklyTaskDone(id, currentStatus, btnEl) {
+  const nextStatus = currentStatus === 'done' ? 'todo' : 'done';
   const card = btnEl?.closest('.me-card');
   if (card) card.classList.add('me-card-fading');
   try {
-    await api('markWeeklyTaskDone', { id });
+    await api('markWeeklyTaskDone', { id, status: nextStatus });
     await loadWeek(weekKey(currentWeekStart));
     renderAll();
   } catch (e) {
     if (card) card.classList.remove('me-card-fading');
-    alert(`Couldn't mark done: ${e.message}`);
+    alert(`Couldn't update: ${e.message}`);
   }
 }
 
