@@ -25,7 +25,7 @@ test.afterEach(async () => {
   await wipeTestWeek();
 });
 
-test('engine: adding a Taster Class auto-generates ~13 weekly_tasks rows', async () => {
+test('engine: adding a Taster Class generates 5 post-processing tasks', async () => {
   const cls = await api('addClass', {
     weekKey: TEST_WEEK_KEY,
     type:    'Taster Class',
@@ -33,7 +33,8 @@ test('engine: adding a Taster Class auto-generates ~13 weekly_tasks rows', async
     instructor: 'cielo',
   });
   expect(cls.generation).toBeTruthy();
-  expect(cls.generation.totalTasks).toBeGreaterThan(10);
+  // New minimal lifecycle: Trim → Bisque → Glaze → Glaze fire → Mark ready
+  expect(cls.generation.totalTasks).toBe(5);
   expect(cls.generation.batchKeys).toEqual(expect.arrayContaining([
     expect.stringMatching(/^bisque-\d{4}-\d{2}-\d{2}$/),
     expect.stringMatching(/^glaze-fire-\d{4}-\d{2}-\d{2}$/),
@@ -48,18 +49,19 @@ test('engine: deadlines compute correctly from offset_days', async () => {
     instructor: 'cielo',
   });
 
-  // Pull the Jan 12 week — bisque load (offset +6) lands here.
-  const bundle = await fetchWeek('2099-01-12');
-  const bisqueLoad = bundle.weeklyTasks.find(t => t.title === 'Bisque load' && t.phase === 'bisque');
-  expect(bisqueLoad).toBeDefined();
-  expect(bisqueLoad.dueDate).toBe('2099-01-13');     // 2099-01-07 + 6
-  expect(bisqueLoad.batchKey).toBe('bisque-2099-01-12');
+  // Bisque fire (offset +6) — lands in week of Jan 12.
+  const wk2 = await fetchWeek('2099-01-12');
+  const bisque = wk2.weeklyTasks.find(t => t.title === 'Bisque fire' && t.phase === 'bisque');
+  expect(bisque).toBeDefined();
+  expect(bisque.dueDate).toBe('2099-01-13');         // 2099-01-07 + 6
+  expect(bisque.batchKey).toBe('bisque-2099-01-12');
+  expect(bisque.assignee).toBe('miso');               // Cielo's rule: Miso loads the kiln
 
-  // Glaze fire unload (offset +15) lands in week of Jan 19.
-  const week3 = await fetchWeek('2099-01-19');
-  const glazeUnload = week3.weeklyTasks.find(t => t.title.startsWith('Glaze fire unload'));
-  expect(glazeUnload).toBeDefined();
-  expect(glazeUnload.dueDate).toBe('2099-01-22');    // 2099-01-07 + 15
+  // Mark ready (offset +16) — lands in week of Jan 19.
+  const wk3 = await fetchWeek('2099-01-19');
+  const ready = wk3.weeklyTasks.find(t => t.title.startsWith('Mark ready'));
+  expect(ready).toBeDefined();
+  expect(ready.dueDate).toBe('2099-01-23');          // 2099-01-07 + 16
 });
 
 test('engine: batching — two Tasters in same week share bisque batch_key', async () => {
@@ -67,11 +69,11 @@ test('engine: batching — two Tasters in same week share bisque batch_key', asy
   await api('addClass', { weekKey: TEST_WEEK_KEY, type: 'Taster Class', date: '2099-01-09', instructor: 'angel' });
 
   const bundle = await fetchWeek('2099-01-12');
-  const bisqueLoads = bundle.weeklyTasks.filter(t => t.phase === 'bisque' && t.title === 'Bisque load');
-  expect(bisqueLoads.length).toBe(2);
+  const bisques = bundle.weeklyTasks.filter(t => t.phase === 'bisque' && t.title === 'Bisque fire');
+  expect(bisques.length).toBe(2);
   // Both should share the same batch_key (phase+week_key).
-  expect(bisqueLoads[0].batchKey).toBe(bisqueLoads[1].batchKey);
-  expect(bisqueLoads[0].batchKey).toBe('bisque-2099-01-12');
+  expect(bisques[0].batchKey).toBe(bisques[1].batchKey);
+  expect(bisques[0].batchKey).toBe('bisque-2099-01-12');
 });
 
 test('engine: regenerating is idempotent — does not duplicate rows', async () => {
@@ -105,37 +107,33 @@ test('engine: free-form class type does not break addClass', async () => {
 });
 
 test('engine: My Week surfaces auto-generated task for the assigned staff', async ({ page }) => {
-  // Generate tasks for cielo
+  // Cielo's hand-paint Glaze task fires at offset +10, so for a class on
+  // Jan 7 it lands in the week of Jan 12. Navigate there to verify.
   await api('addClass', { weekKey: TEST_WEEK_KEY, type: 'Taster Class', date: '2099-01-07', instructor: 'cielo' });
 
-  // Refresh the page so the My Week cache is fresh
   await page.reload();
   autoAcceptPassword(page);
-  await navigateToTestWeek(page);
+  await page.evaluate((key) => window.__jumpToWeek(key), '2099-01-12');
 
-  // Pick "Cielo" as current user — should land on My Week
   await page.locator('#current-user-select').selectOption('cielo');
   await expect(page.locator('#tab-me.active')).toBeVisible();
 
-  // The auto-generated "Run class" task is assigned to the instructor (cielo)
-  await expect(page.locator('#me-content')).toContainText('Run class');
-  // And shows the class context
+  await expect(page.locator('#me-content')).toContainText('Glaze pieces');
   await expect(page.locator('#me-content')).toContainText('Taster Class');
 });
 
-test('engine: marking a weekly task done updates server status', async ({ page }) => {
+test('engine: marking a weekly task done updates server status', async () => {
   await api('addClass', { weekKey: TEST_WEEK_KEY, type: 'Taster Class', date: '2099-01-07', instructor: 'cielo' });
 
-  // Pick the first task assigned to cielo and mark it done via the API
-  // (UI quick-done has a confirm() dialog — exercised in a separate test)
-  const bundle = await fetchWeek(TEST_WEEK_KEY);
-  const cieloTasks = bundle.weeklyTasks.filter(t => t.assignee === 'cielo');
+  // Find Cielo's glaze task in week 2 and mark it done via the API
+  const wk2 = await fetchWeek('2099-01-12');
+  const cieloTasks = wk2.weeklyTasks.filter(t => t.assignee === 'cielo');
   expect(cieloTasks.length).toBeGreaterThan(0);
   const target = cieloTasks[0];
 
   await api('markWeeklyTaskDone', { id: target.id });
 
-  const after = await fetchWeek(TEST_WEEK_KEY);
+  const after = await fetchWeek('2099-01-12');
   const updated = after.weeklyTasks.find(t => t.id === target.id);
   expect(updated.status).toBe('done');
 });

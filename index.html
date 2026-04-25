@@ -66,6 +66,11 @@ a:hover{text-decoration:underline}
 .me-card-status.done{background:#D1FAE5;color:#065F46}
 .me-card-status.issue{background:#FEE2E2;color:#991B1B}
 .me-card-status.skipped{background:#F3F4F6;color:#6B7280}
+.me-card-done{background:var(--teal);color:#fff;border:none;border-radius:6px;width:30px;height:30px;font-size:16px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:transform .1s,background .15s;flex-shrink:0}
+.me-card-done:hover{background:var(--teal-dark);transform:scale(1.08)}
+.me-card-done:active{transform:scale(0.95)}
+.me-card-batch{font-size:9px;font-weight:700;background:#FEF3C7;color:#92400E;padding:2px 6px;border-radius:3px;text-transform:uppercase;letter-spacing:.4px}
+.me-card-fading{opacity:.3;transition:opacity .25s}
 
 /* ── GOALS TAB ── */
 .goal-card{background:var(--surface);border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.08);margin-bottom:12px;overflow:hidden}
@@ -803,18 +808,19 @@ function renderMyWeekTab() {
   for (const t of week.weeklyTasks || []) {
     if (t.assignee !== currentUser) continue;
     if (t.sourceKind === 'goal' || t.sourceKind === 'special') continue;
+    if (t.status === 'done') continue;            // hide completed work from the queue
     const classLabel = t.classType
       ? ` · ${t.classType}${t.classDate ? ' · ' + fmtShortDate(t.classDate) : ''}`
       : '';
-    const batchLabel = t.batchKey ? ` · batch` : '';
     myItems.push({
-      source:   t.sourceKind === 'recurring' ? 'recurring' : 'task',
-      title:    t.title + classLabel + batchLabel,
-      notes:    t.notes || '',
-      status:   t.status || 'todo',
-      dateIso:  t.dueDate || null,
-      dayLabel: t.dueDate ? `Due ${fmtShortDate(t.dueDate)}` : '',
-      onClick:  `markWeeklyTaskQuickDone('${t.id}')`,
+      source:    t.sourceKind === 'recurring' ? 'recurring' : 'task',
+      title:     t.title + classLabel,
+      notes:     t.notes || '',
+      status:    t.status || 'todo',
+      dateIso:   t.dueDate || null,
+      dayLabel:  t.dueDate ? `Due ${fmtShortDate(t.dueDate)}` : '',
+      doneId:    t.id,                            // when set, renders an inline Done button
+      batched:   !!t.batchKey,
     });
   }
 
@@ -832,18 +838,28 @@ function renderMyWeekTab() {
     s === 'recurring' ? 'Chore'   :
     s === 'task'      ? 'Task'    : s;
 
-  const renderCard = (item, cls) =>
-    `<div class="me-card ${cls}" onclick="${item.onClick}">
+  const renderCard = (item, cls) => {
+    // Auto-generated weekly tasks (task/recurring) get an inline Done
+    // button. Goal/special items keep their modal click behaviour.
+    const cardOnClick = item.doneId ? '' : (item.onClick ? `onclick="${item.onClick}"` : '');
+    const doneBtn = item.doneId
+      ? `<button class="me-card-done" title="Mark done" onclick="event.stopPropagation(); markWeeklyTaskDoneInline('${item.doneId}', this)">✓</button>`
+      : '';
+    const batchPill = item.batched ? `<span class="me-card-batch">batch</span>` : '';
+    return `<div class="me-card ${cls}" ${cardOnClick}>
       <span class="me-card-source ${item.source}">${sourceLabel(item.source)}</span>
       <div class="me-card-main">
         <div class="me-card-title">${item.title}</div>
         ${item.notes ? `<div class="me-card-notes">${item.notes}</div>` : ''}
       </div>
       <div class="me-card-meta">
+        ${batchPill}
         ${item.dayLabel ? `<span class="me-card-day">${item.dayLabel}</span>` : ''}
         <span class="me-card-status ${item.status}">${STATUS_LABELS[item.status] || item.status}</span>
+        ${doneBtn}
       </div>
     </div>`;
+  };
 
   const html = [
     `<div class="me-banner">
@@ -1331,15 +1347,20 @@ async function refreshExpandedGoal(goalId) {
 
 // ── Weekly tasks (auto-generated) ────────────
 
-// One-tap "mark done" for an auto-generated weekly_tasks row. Used from My
-// Week — staff click their task and it flips to done immediately.
-async function markWeeklyTaskQuickDone(id) {
-  if (!confirm('Mark this task done?')) return;
+// Inline Done button on a weekly_task card. No confirm dialog — staff
+// tap the ✓ once, the card fades out, the API call runs in the
+// background. On error, the card flips back and the user sees an alert.
+async function markWeeklyTaskDoneInline(id, btnEl) {
+  const card = btnEl?.closest('.me-card');
+  if (card) card.classList.add('me-card-fading');
   try {
     await api('markWeeklyTaskDone', { id });
     await loadWeek(weekKey(currentWeekStart));
     renderAll();
-  } catch (e) { alert(`Failed: ${e.message}`); }
+  } catch (e) {
+    if (card) card.classList.remove('me-card-fading');
+    alert(`Couldn't mark done: ${e.message}`);
+  }
 }
 
 // ── Small formatting + escaping helpers ───────
