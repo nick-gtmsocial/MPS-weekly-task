@@ -53,6 +53,8 @@ a:hover{text-decoration:underline}
 .me-card-source.weekly{background:#E0E7FF;color:#3730A3}
 .me-card-source.special{background:#FEF3C7;color:#92400E}
 .me-card-source.goal{background:#F3E8FF;color:#6B21A8}
+.me-card-source.recurring{background:#E0F2FE;color:#0C4A6E}
+.me-card-source.task{background:#FCE7F3;color:#9D174D}
 .me-card-main{flex:1;min-width:0}
 .me-card-title{font-size:13px;font-weight:600;color:var(--text);margin-bottom:2px}
 .me-card-notes{font-size:11px;color:var(--muted);font-style:italic;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -539,6 +541,7 @@ async function loadWeek(key) {
     specialTasks: bundle.specialTasks  || [],
     classes:      bundle.classes       || [],
     goalTasks:    bundle.goalTasks     || [],
+    weeklyTasks:  bundle.weeklyTasks   || [],
   };
   loadedWeeks.add(key);
   return db.weeks[key];
@@ -795,6 +798,26 @@ function renderMyWeekTab() {
     });
   }
 
+  // Auto-generated weekly_tasks (class/piece/recurring/manual). Goal/special
+  // weekly_tasks are surfaced via their source tables above to avoid duping.
+  for (const t of week.weeklyTasks || []) {
+    if (t.assignee !== currentUser) continue;
+    if (t.sourceKind === 'goal' || t.sourceKind === 'special') continue;
+    const classLabel = t.classType
+      ? ` · ${t.classType}${t.classDate ? ' · ' + fmtShortDate(t.classDate) : ''}`
+      : '';
+    const batchLabel = t.batchKey ? ` · batch` : '';
+    myItems.push({
+      source:   t.sourceKind === 'recurring' ? 'recurring' : 'task',
+      title:    t.title + classLabel + batchLabel,
+      notes:    t.notes || '',
+      status:   t.status || 'todo',
+      dateIso:  t.dueDate || null,
+      dayLabel: t.dueDate ? `Due ${fmtShortDate(t.dueDate)}` : '',
+      onClick:  `markWeeklyTaskQuickDone('${t.id}')`,
+    });
+  }
+
   // Bucket. Overdue = past + not done. Today only shows when viewing the current week.
   const overdue = myItems.filter(i => i.dateIso && i.dateIso <  referenceIso && i.status !== 'done');
   const today   = isCurrentWeek
@@ -802,9 +825,16 @@ function renderMyWeekTab() {
     : [];
   const rest    = myItems.filter(i => !overdue.includes(i) && !today.includes(i));
 
+  const sourceLabel = s =>
+    s === 'weekly'    ? 'Weekly'  :
+    s === 'special'   ? 'Special' :
+    s === 'goal'      ? 'Goal'    :
+    s === 'recurring' ? 'Chore'   :
+    s === 'task'      ? 'Task'    : s;
+
   const renderCard = (item, cls) =>
     `<div class="me-card ${cls}" onclick="${item.onClick}">
-      <span class="me-card-source ${item.source}">${item.source === 'weekly' ? 'Weekly' : item.source === 'special' ? 'Special' : 'Goal'}</span>
+      <span class="me-card-source ${item.source}">${sourceLabel(item.source)}</span>
       <div class="me-card-main">
         <div class="me-card-title">${item.title}</div>
         ${item.notes ? `<div class="me-card-notes">${item.notes}</div>` : ''}
@@ -1297,6 +1327,19 @@ async function refreshExpandedGoal(goalId) {
       body.dataset.loaded = 'true';
     }
   } catch { /* ignored — full tab re-render runs next */ }
+}
+
+// ── Weekly tasks (auto-generated) ────────────
+
+// One-tap "mark done" for an auto-generated weekly_tasks row. Used from My
+// Week — staff click their task and it flips to done immediately.
+async function markWeeklyTaskQuickDone(id) {
+  if (!confirm('Mark this task done?')) return;
+  try {
+    await api('markWeeklyTaskDone', { id });
+    await loadWeek(weekKey(currentWeekStart));
+    renderAll();
+  } catch (e) { alert(`Failed: ${e.message}`); }
 }
 
 // ── Small formatting + escaping helpers ───────

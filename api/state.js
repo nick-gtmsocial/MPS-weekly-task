@@ -8,6 +8,7 @@
 
 import { requireAuth, setCors } from '../lib/auth.js';
 import { sbGet, sbPost, sbPatch, sbDelete, sbErrorResponse } from '../lib/supabase.js';
+import { generateForClass, addDaysIso } from '../lib/generators.js';
 
 export default async function handler(req, res) {
   setCors(res);
@@ -33,7 +34,7 @@ async function handleGet(req, res) {
   // Compute the Sunday of the week so goal-task queries can filter by [Mon, Sun].
   const weekEnd = addDaysIso(weekKey, 6);
 
-  const [assignmentRows, specialRows, classRows, goalTaskRows] = await Promise.all([
+  const [assignmentRows, specialRows, classRows, goalTaskRows, weeklyTaskRows] = await Promise.all([
     sbGet(`week_assignments?week_key=eq.${weekKey}&select=task_id,day_idx,assignees,status,note`),
     sbGet(`special_tasks?week_key=eq.${weekKey}&select=id,staff_id,title,scope,deadline,status,created_at,special_task_updates(id,update_date,text,created_at)&order=created_at.asc`),
     sbGet(`classes?week_key=eq.${weekKey}&select=id,class_num,type,class_date,instructor,kilnfire_link,kilnfire_external_id,notes,created_at,pieces(id,student,description,stage,notes,stage_history,created_at)&order=created_at.asc`),
@@ -41,6 +42,9 @@ async function handleGet(req, res) {
     // were due before this week (to surface overdue items regardless of
     // which week you're viewing).
     sbGet(`goal_tasks?deadline=lte.${weekEnd}&or=(deadline.gte.${weekKey},status.neq.done)&select=id,goal_id,section,subsection,title,owner,deadline,status,notes,goals(id,title,target_date)&order=deadline.asc.nullslast`),
+    // Auto-generated weekly tasks for this week. Embed class context so the
+    // UI can show "Taster · Apr 22" without a separate fetch.
+    sbGet(`weekly_tasks?week_key=eq.${weekKey}&select=*,classes(type,class_date),pieces(student)&order=due_date.asc,batch_key.asc.nullsfirst`),
   ]);
 
   return res.status(200).json({
@@ -49,13 +53,34 @@ async function handleGet(req, res) {
     specialTasks: specialRows.map(shapeSpecialTask),
     classes:      classRows.map(shapeClass),
     goalTasks:    goalTaskRows.map(shapeGoalTaskForWeek),
+    weeklyTasks:  weeklyTaskRows.map(shapeWeeklyTask),
   });
 }
 
-function addDaysIso(iso, n) {
-  const d = new Date(`${iso}T12:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + n);
-  return d.toISOString().slice(0, 10);
+function shapeWeeklyTask(r) {
+  return {
+    id:                 r.id,
+    weekKey:            r.week_key,
+    dueDate:            r.due_date,
+    sourceKind:         r.source_kind,
+    classId:            r.class_id,
+    pieceId:            r.piece_id,
+    classTypeTaskId:    r.class_type_task_id,
+    recurringTaskId:    r.recurring_task_id,
+    goalTaskId:         r.goal_task_id,
+    specialTaskId:      r.special_task_id,
+    title:              r.title,
+    phase:              r.phase,
+    batchKey:           r.batch_key,
+    assignee:           r.assignee,
+    status:             r.status,
+    durationMinutes:    r.duration_minutes,
+    notes:              r.notes,
+    // Embedded context (for fast UI rendering without a second fetch):
+    classType:          r.classes?.type      || null,
+    classDate:          r.classes?.class_date || null,
+    pieceStudent:       r.pieces?.student     || null,
+  };
 }
 
 function shapeGoalTaskForWeek(r) {
@@ -210,7 +235,16 @@ const OPS = {
       kilnfire_external_id: kilnfireExternalId || null,
       notes:                notes              || null,
     });
-    return shapeClass({ ...row, pieces: [] });
+    // Auto-generate follow-on tasks if the class type matches a known
+    // class_types row. Generator is forgiving — it returns a no-op result
+    // for unmatched types instead of throwing, so a free-form class type
+    // doesn't block class creation.
+    let generation = null;
+    if (row.class_date && row.type) {
+      try { generation = await generateForClass(row.id); }
+      catch (e) { generation = { error: e.message }; }
+    }
+    return { ...shapeClass({ ...row, pieces: [] }), generation };
   },
 
   async updateClass({ id, classNum, type, date, instructor, kilnfireLink, notes }) {
@@ -281,6 +315,48 @@ const OPS = {
   async deletePiece({ id }) {
     requireFields({ id });
     await sbDelete(`pieces?id=eq.${id}`);
+    return { ok: true };
+  },
+
+  // ── weekly_tasks ──
+  async markWeeklyTaskDone({ id, status }) {
+    requireFields({ id });
+    const [row] = await sbPatch(`weekly_tasks?id=eq.${id}`, {
+      status:     status || 'done',
+      updated_at: new Date().toISOString(),
+    });
+    return shapeWeeklyTask(row);
+  },
+
+  async assignWeeklyTask({ id, assignee }) {
+    requireFields({ id });
+    const [row] = await sbPatch(`weekly_tasks?id=eq.${id}`, {
+      assignee:   assignee || null,
+      updated_at: new Date().toISOString(),
+    });
+    return shapeWeeklyTask(row);
+  },
+
+  async addManualWeeklyTask({ weekKey, dueDate, title, assignee, durationMinutes, notes }) {
+    requireFields({ weekKey, title });
+    const [row] = await sbPost('weekly_tasks', {
+      week_key:         weekKey,
+      due_date:         dueDate || weekKey,
+      source_kind:      'manual',
+      title,
+      phase:            null,
+      batch_key:        null,
+      assignee:         assignee || null,
+      status:           'todo',
+      duration_minutes: durationMinutes || null,
+      notes:            notes || null,
+    });
+    return shapeWeeklyTask(row);
+  },
+
+  async deleteWeeklyTask({ id }) {
+    requireFields({ id });
+    await sbDelete(`weekly_tasks?id=eq.${id}`);
     return { ok: true };
   },
 };

@@ -71,6 +71,16 @@ export async function wipeTestGoals() {
   }
 }
 
+export async function generateApi(op, payload = {}) {
+  const res = await fetch(`${BASE}/api/generate`, {
+    method:  'POST',
+    headers: { 'Authorization': `Bearer ${PW}`, 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ op, ...payload }),
+  });
+  if (!res.ok) throw new Error(`generate ${op} failed: ${res.status} ${await res.text()}`);
+  return res.json();
+}
+
 // Wait until the week bundle satisfies the predicate, polling the API.
 export async function waitForWeek(predicate, { timeoutMs = 5_000, intervalMs = 250 } = {}) {
   const deadline = Date.now() + timeoutMs;
