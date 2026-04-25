@@ -121,6 +121,107 @@ test('goals: deleting a goal removes it from the list', async ({ page }) => {
   expect(goals.find(g => g.id === created.goal.id)).toBeUndefined();
 });
 
+// ── PHASE 3.5: SUB-GOALS + TEMPLATE LIBRARY ─────────────────────────
+
+test('templates: all 6 templates are seeded and pickable in the New Goal modal', async ({ page }) => {
+  await page.locator('button[data-tab="goals"]').click();
+  await page.getByRole('button', { name: '+ New Goal' }).click();
+  // openNewGoalModal is async (awaits loadGoals when needed) — wait for the
+  // template select to appear before reading its options.
+  await expect(page.locator('#goal-template')).toBeVisible();
+
+  const options = await page.locator('#goal-template option').allTextContents();
+  // The "— Freeform —" option plus 6 templates.
+  expect(options.length).toBeGreaterThanOrEqual(7);
+  expect(options).toEqual(expect.arrayContaining([
+    expect.stringContaining('Campaign Launch'),
+    expect.stringContaining('New Class Launch'),
+    expect.stringContaining('Seasonal Promotion'),
+    expect.stringContaining('Lapsed Customer Re-engagement'),
+    expect.stringContaining('Kiln / Studio Maintenance Cycle'),
+    expect.stringContaining('New Instructor Onboarding'),
+  ]));
+});
+
+test('templates: title keyword auto-suggests a matching template', async ({ page }) => {
+  await page.locator('button[data-tab="goals"]').click();
+  await page.getByRole('button', { name: '+ New Goal' }).click();
+
+  // Typing "Mother's Day" should suggest Seasonal Promotion.
+  await page.locator('#goal-title').fill(`Mother's Day push ${TEST_GOAL_MARK}`);
+  await expect(page.locator('#template-suggestion')).toContainText('Seasonal Promotion');
+  // Preview shows the seasonal sections
+  await expect(page.locator('.template-preview')).toContainText('Strategy');
+
+  // Switching to "kiln maintenance" should re-suggest the maintenance cycle.
+  await page.locator('#goal-title').fill(`Q3 kiln maintenance ${TEST_GOAL_MARK}`);
+  await expect(page.locator('#template-suggestion')).toContainText('Kiln');
+});
+
+test('sub-goals: create a parent + child, rollup progress includes child tasks', async ({ page }) => {
+  // Seed parent + child via API to keep the test focused on the tree behavior.
+  const parent = await goalsApiRaw('createGoal', {
+    title:      `Parent ${TEST_GOAL_MARK}`,
+    targetDate: TEST_TARGET_ISO,
+  });
+  const child = await goalsApiRaw('createGoal', {
+    title:      `Child ${TEST_GOAL_MARK}`,
+    targetDate: TEST_TARGET_ISO,
+    parentId:   parent.goal.id,
+  });
+  // 2 tasks on the child, one done.
+  await goalsApiRaw('addGoalTask', { goalId: child.goal.id, title: 'A', status: 'todo' });
+  await goalsApiRaw('addGoalTask', { goalId: child.goal.id, title: 'B', status: 'done' });
+
+  await page.locator('button[data-tab="goals"]').click();
+
+  const parentCard = page.locator('.goal-card').filter({ hasText: `Parent ${TEST_GOAL_MARK}` }).first();
+  const childCard  = page.locator('.goal-card').filter({ hasText: `Child ${TEST_GOAL_MARK}` }).first();
+
+  await expect(parentCard).toBeVisible();
+  await expect(childCard).toBeVisible();
+
+  // Parent shows the sub-goal count badge
+  await expect(parentCard).toContainText('1 sub-goal');
+
+  // Parent rolls up child's task counts: 1 / 2 done (rolled up)
+  await expect(parentCard).toContainText('1 / 2');
+  await expect(parentCard).toContainText('rolled up');
+
+  // Child card is rendered nested under the parent (inside .goal-tree-children)
+  const nested = parentCard.locator('xpath=ancestor::div[@class="goal-tree-node"][1]')
+    .locator('.goal-tree-children .goal-card').filter({ hasText: `Child ${TEST_GOAL_MARK}` });
+  await expect(nested).toBeVisible();
+});
+
+test('sub-goals: + Sub-goal button creates a child under the parent', async ({ page }) => {
+  const parent = await goalsApiRaw('createGoal', {
+    title:      `Parent2 ${TEST_GOAL_MARK}`,
+    targetDate: TEST_TARGET_ISO,
+  });
+
+  await page.locator('button[data-tab="goals"]').click();
+  const card = page.locator('.goal-card').filter({ hasText: `Parent2 ${TEST_GOAL_MARK}` }).first();
+  await card.locator('.goal-card-head').click();
+
+  await card.getByRole('button', { name: '+ Sub-goal' }).click();
+  // Modal title should reference the parent
+  await expect(page.locator('.modal-header h3')).toContainText(`Parent2 ${TEST_GOAL_MARK}`);
+  // The parent select should be pre-selected to the parent
+  await expect(page.locator('#goal-parent')).toHaveValue(parent.goal.id);
+
+  await page.locator('#goal-title').fill(`Spawned child ${TEST_GOAL_MARK}`);
+  await page.getByRole('button', { name: 'Create' }).click();
+
+  // Child appears under the parent
+  const tree = page.locator('.goal-tree-node').filter({ hasText: `Parent2 ${TEST_GOAL_MARK}` }).first();
+  await expect(tree.locator('.goal-tree-children').getByText(`Spawned child ${TEST_GOAL_MARK}`)).toBeVisible();
+
+  const { goals } = await fetchGoals();
+  const spawned = goals.find(g => g.title.includes('Spawned child'));
+  expect(spawned?.parentId).toBe(parent.goal.id);
+});
+
 test('my week: goal tasks due this week appear for the assigned user', async ({ page }) => {
   // Create a goal with target in the TEST_WEEK_KEY week, assign a task to Nick
   // with a deadline inside that week.

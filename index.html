@@ -110,6 +110,15 @@ a:hover{text-decoration:underline}
 .template-preview-section{font-weight:700;color:var(--text);margin-top:6px;font-size:11px;text-transform:uppercase;letter-spacing:.4px}
 .template-preview-section:first-child{margin-top:0}
 .template-preview-task{padding-left:8px;margin:2px 0}
+.template-suggestion-hint{font-size:11px;font-weight:400;color:var(--teal-dark);margin-left:6px;font-style:italic}
+
+/* ── GOAL TREE (sub-goals) ── */
+.goal-tree-node{margin-bottom:10px}
+.goal-tree-children{margin-left:24px;border-left:2px solid var(--border);padding-left:16px;margin-top:4px}
+.goal-tree-children .goal-tree-node{margin-bottom:6px}
+.goal-card.is-child{box-shadow:0 1px 2px rgba(0,0,0,.05)}
+.goal-card.is-child .goal-card-title{font-size:14px}
+.subgoal-count{background:#F3E8FF;color:#6B21A8;padding:1px 7px;border-radius:10px;font-size:10px;font-weight:700;margin-left:6px}
 
 /* ── LEGEND ── */
 .legend-bar{background:var(--surface);border-bottom:1px solid var(--border);padding:8px 24px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:12px}
@@ -856,14 +865,38 @@ function renderGoalsTab() {
     return;
   }
 
-  host.innerHTML = db.goals.map(buildGoalCard).join('');
+  // Build a parent → children index. Any goal whose parentId points to a
+  // goal we no longer have (e.g. parent was deleted) is treated as a root.
+  const byId      = new Map(db.goals.map(g => [g.id, g]));
+  const children  = new Map();                 // parentId → [goals]
+  const roots     = [];
+  for (const g of db.goals) {
+    if (g.parentId && byId.has(g.parentId)) {
+      if (!children.has(g.parentId)) children.set(g.parentId, []);
+      children.get(g.parentId).push(g);
+    } else {
+      roots.push(g);
+    }
+  }
+
+  host.innerHTML = roots.map(g => renderGoalTreeNode(g, children, 0)).join('');
 }
 
-function buildGoalCard(g) {
+function renderGoalTreeNode(goal, childrenMap, depth) {
+  const kids = childrenMap.get(goal.id) || [];
+  const card = buildGoalCard(goal, { isChild: depth > 0, childCount: kids.length });
+  const childrenHtml = kids.length
+    ? `<div class="goal-tree-children">${kids.map(k => renderGoalTreeNode(k, childrenMap, depth + 1)).join('')}</div>`
+    : '';
+  return `<div class="goal-tree-node">${card}${childrenHtml}</div>`;
+}
+
+function buildGoalCard(g, opts = {}) {
   const today        = new Date().toISOString().slice(0, 10);
   const daysToTarget = daysBetween(today, g.targetDate);
   const ownerStaff   = g.owner && STAFF.find(s => s.id === g.owner);
   const pct          = g.totalTasks > 0 ? Math.round((g.doneTasks / g.totalTasks) * 100) : 0;
+  const { isChild = false, childCount = 0 } = opts;
 
   const countdown = daysToTarget > 0
     ? `<span class="goal-pill countdown">${daysToTarget}d to go</span>`
@@ -872,10 +905,13 @@ function buildGoalCard(g) {
       : `<span class="goal-pill countdown past">${Math.abs(daysToTarget)}d past</span>`;
 
   return `
-    <div class="goal-card" id="goal-card-${g.id}">
+    <div class="goal-card ${isChild ? 'is-child' : ''}" id="goal-card-${g.id}">
       <div class="goal-card-head" onclick="toggleGoalExpand('${g.id}')">
         <div>
-          <div class="goal-card-title">${escapeHtml(g.title)}</div>
+          <div class="goal-card-title">
+            ${escapeHtml(g.title)}
+            ${childCount > 0 ? `<span class="subgoal-count">${childCount} sub-goal${childCount === 1 ? '' : 's'}</span>` : ''}
+          </div>
           <div class="goal-card-meta">
             <span>🎯 ${fmtLongDate(g.targetDate)}</span>
             ${countdown}
@@ -886,7 +922,7 @@ function buildGoalCard(g) {
         </div>
         <div class="goal-progress">
           <div class="goal-progress-bar"><div class="goal-progress-fill" style="width:${pct}%"></div></div>
-          <div class="goal-progress-label">${g.doneTasks} / ${g.totalTasks} done</div>
+          <div class="goal-progress-label">${g.doneTasks} / ${g.totalTasks} done${childCount > 0 ? ' (rolled up)' : ''}</div>
         </div>
         <div class="goal-expand-icon">&#9654;</div>
       </div>
@@ -954,34 +990,57 @@ function renderGoalBody(goalId, tasks) {
 
   return sectionHtml.join('') + `
     <div class="goal-card-actions">
+      <button class="btn btn-sm btn-secondary" onclick="openNewSubgoalModal('${goalId}')">+ Sub-goal</button>
       <button class="btn btn-sm btn-secondary" onclick="openEditGoalModal('${goalId}')">Edit goal</button>
       <button class="btn btn-sm btn-danger"    onclick="deleteGoal('${goalId}')">Delete</button>
     </div>`;
 }
 
+async function openNewSubgoalModal(parentId) {
+  if (!goalsLoaded) await loadGoals();
+  modalState = { type: 'newGoal', parentId };
+  buildNewGoalModal({ parentId });
+}
+
 // ── Goal modals ──────────────────────────────
 
 async function openNewGoalModal() {
-  // Make sure templates are loaded — the user may click "+ New Goal" before the
-  // lazy Goals-tab load completes (or from a tab where it's never run).
   if (!goalsLoaded) await loadGoals();
   modalState = { type: 'newGoal' };
+  buildNewGoalModal();
+}
+
+function buildNewGoalModal({ parentId = null } = {}) {
+  const parent = parentId && db.goals.find(g => g.id === parentId);
+
   const staffOpts = [{ id:'', name:'— No owner —' }]
     .concat(STAFF.filter(s => s.id !== 'shared'))
     .map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+
   const templateOpts = '<option value="">— Freeform (no template) —</option>' +
     db.templates.map(t => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('');
 
+  // Parent picker: only top-level goals can be parents (avoid 3-deep trees for now).
+  const parentChoices = db.goals.filter(g => !g.parentId);
+  const parentOpts = '<option value="">— Top-level goal —</option>' +
+    parentChoices.map(g => `<option value="${g.id}" ${g.id === parentId ? 'selected' : ''}>${escapeHtml(g.title)}</option>`).join('');
+
+  // Prefill the target date from the parent so a new sub-goal lands in a sane
+  // range by default (user can change it).
+  const prefillTarget = parent ? parent.targetDate : '';
+
   openModal(`
-    <div class="modal-header"><h3>New Goal</h3></div>
+    <div class="modal-header"><h3>${parent ? `New sub-goal under "${escapeHtml(parent.title)}"` : 'New Goal'}</h3></div>
     <div class="modal-body">
       <div class="form-field"><label>Title</label>
-        <input type="text" id="goal-title" placeholder="e.g. Mother's Day Campaign"></div>
+        <input type="text" id="goal-title" placeholder="e.g. Mother's Day Campaign" oninput="suggestTemplateFromTitle()"></div>
       <div class="form-field"><label>Target date</label>
-        <input type="date" id="goal-target"></div>
+        <input type="date" id="goal-target" value="${prefillTarget}"></div>
       <div class="form-field"><label>Owner</label>
         <select id="goal-owner">${staffOpts}</select></div>
-      <div class="form-field"><label>Template</label>
+      <div class="form-field"><label>Parent goal</label>
+        <select id="goal-parent">${parentOpts}</select></div>
+      <div class="form-field"><label>Template <span id="template-suggestion" class="template-suggestion-hint"></span></label>
         <select id="goal-template" onchange="renderTemplatePreview()">${templateOpts}</select>
         <div id="template-preview-host"></div>
       </div>
@@ -993,6 +1052,51 @@ async function openNewGoalModal() {
       <button class="btn btn-primary" onclick="saveNewGoal()">Create</button>
     </div>`);
 }
+
+// Keyword → template-name map. Order matters: more specific matches first.
+const TEMPLATE_KEYWORDS = [
+  { kw: ['lapsed', 'win back', 're-engage', 'reengage', 'retention', 'lost customer', 'churn'],          template: 'Lapsed Customer Re-engagement' },
+  { kw: ['mother', 'father', 'valentine', 'holiday', 'christmas', 'gift', 'season', 'easter'],            template: 'Seasonal Promotion' },
+  { kw: ['kiln', 'maintenance', 'glaze prep', 'deep clean', 'inventory', 'supplies'],                     template: 'Kiln / Studio Maintenance Cycle' },
+  { kw: ['instructor', 'onboard', 'new teacher', 'training', 'hire'],                                     template: 'New Instructor Onboarding' },
+  { kw: ['new class', 'launch class', 'introduce class', 'class launch'],                                 template: 'New Class Launch' },
+  { kw: ['campaign', 'collab', 'collaboration', 'launch'],                                                template: 'Campaign Launch' },
+];
+
+// Auto-pre-select a template based on keywords in the title. Only fires while
+// the template dropdown is still on the default ("— Freeform —"); once the
+// user picks something explicitly we leave them alone.
+function suggestTemplateFromTitle() {
+  const titleEl    = document.getElementById('goal-title');
+  const selectEl   = document.getElementById('goal-template');
+  const hintEl     = document.getElementById('template-suggestion');
+  if (!titleEl || !selectEl) return;
+
+  // Don't override an explicit user choice.
+  if (selectEl.dataset.userPicked === 'true') return;
+
+  const title = titleEl.value.toLowerCase();
+  let match = null;
+  for (const { kw, template } of TEMPLATE_KEYWORDS) {
+    if (kw.some(k => title.includes(k))) { match = template; break; }
+  }
+
+  const tmpl = match && db.templates.find(t => t.name === match);
+  if (tmpl) {
+    selectEl.value = tmpl.id;
+    if (hintEl) hintEl.textContent = `— suggested: "${tmpl.name}"`;
+    renderTemplatePreview();
+  } else {
+    selectEl.value = '';
+    if (hintEl) hintEl.textContent = '';
+    renderTemplatePreview();
+  }
+}
+
+// Track explicit user choices on the template dropdown so we don't overwrite them.
+document.addEventListener('change', e => {
+  if (e.target?.id === 'goal-template') e.target.dataset.userPicked = 'true';
+});
 
 function renderTemplatePreview() {
   const id   = document.getElementById('goal-template').value;
@@ -1020,6 +1124,7 @@ async function saveNewGoal() {
     title:      document.getElementById('goal-title').value.trim(),
     targetDate: document.getElementById('goal-target').value,
     owner:      document.getElementById('goal-owner').value || null,
+    parentId:   document.getElementById('goal-parent').value || null,
     notes:      document.getElementById('goal-notes').value.trim() || null,
     templateId: document.getElementById('goal-template').value || null,
   };

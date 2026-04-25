@@ -39,17 +39,31 @@ async function handleGet(req, res) {
     sbGet('templates?select=id,name,description,sections&order=name.asc'),
   ]);
 
+  // Shape each goal with its own task counts first, then roll child counts up
+  // into their parents so the tree's progress bars include sub-goal work.
+  const shaped = goals.map(g => ({
+    ...shapeGoal(g),
+    totalTasks: (g.goal_tasks || []).length,
+    doneTasks:  (g.goal_tasks || []).filter(t => t.status === 'done').length,
+    nextDeadline: (g.goal_tasks || [])
+      .filter(t => t.status !== 'done' && t.deadline)
+      .map(t => t.deadline)
+      .sort()[0] || null,
+  }));
+
+  const byId = new Map(shaped.map(g => [g.id, g]));
+  for (const g of shaped) {
+    let cursor = g.parentId;
+    while (cursor && byId.has(cursor)) {
+      const p = byId.get(cursor);
+      p.totalTasks += (g.totalTasks || 0);
+      p.doneTasks  += (g.doneTasks  || 0);
+      cursor = p.parentId;
+    }
+  }
+
   return res.status(200).json({
-    goals: goals.map(g => ({
-      ...shapeGoal(g),
-      totalTasks: (g.goal_tasks || []).length,
-      doneTasks:  (g.goal_tasks || []).filter(t => t.status === 'done').length,
-      // Earliest incomplete deadline across tasks — drives the "next up" surfacing.
-      nextDeadline: (g.goal_tasks || [])
-        .filter(t => t.status !== 'done' && t.deadline)
-        .map(t => t.deadline)
-        .sort()[0] || null,
-    })),
+    goals:     shaped,
     templates: templates.map(shapeTemplate),
   });
 }
@@ -64,7 +78,7 @@ async function handlePost(req, res) {
 
 // ─── Ops ──────────────────────────────────────────────────────
 const OPS = {
-  async createGoal({ title, targetDate, owner, notes, templateId }) {
+  async createGoal({ title, targetDate, owner, notes, templateId, parentId }) {
     requireFields({ title, targetDate });
     const [goal] = await sbPost('goals', {
       title,
@@ -72,6 +86,7 @@ const OPS = {
       owner:       owner       || null,
       notes:       notes       || null,
       template_id: templateId  || null,
+      parent_id:   parentId    || null,
       status:      'active',
     });
 
@@ -92,7 +107,7 @@ const OPS = {
     };
   },
 
-  async updateGoal({ id, title, targetDate, owner, notes, status }) {
+  async updateGoal({ id, title, targetDate, owner, notes, status, parentId }) {
     requireFields({ id });
     const patch = {};
     if (title      !== undefined) patch.title       = title;
@@ -100,6 +115,7 @@ const OPS = {
     if (owner      !== undefined) patch.owner       = owner;
     if (notes      !== undefined) patch.notes       = notes;
     if (status     !== undefined) patch.status      = status;
+    if (parentId   !== undefined) patch.parent_id   = parentId;
     patch.updated_at = new Date().toISOString();
     const [row] = await sbPatch(`goals?id=eq.${id}`, patch);
     return shapeGoal(row);
@@ -214,6 +230,7 @@ function shapeGoal(r) {
     status:     r.status,
     notes:      r.notes,
     templateId: r.template_id,
+    parentId:   r.parent_id,
     createdAt:  r.created_at,
   };
 }
