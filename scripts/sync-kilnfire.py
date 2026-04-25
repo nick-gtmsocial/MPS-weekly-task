@@ -18,12 +18,12 @@ Usage:
   python scripts/sync-kilnfire.py --mock data.json # use a saved planning payload
 """
 
-import argparse, json, os, sys, datetime, re
+import argparse, csv, io, json, os, sys, datetime, re
 from pathlib import Path
 
 # Allow importing the local kilnfire package
 sys.path.insert(0, str(Path(__file__).parent))
-from kilnfire.client import login_session, fetch_planning  # noqa: E402
+from kilnfire.client import login_session, fetch_planning_csv  # noqa: E402
 
 import requests
 
@@ -143,23 +143,21 @@ def main():
         print("BASE_URL and STUDIO_PASSWORD must be set (env or --base-url/--password).")
         sys.exit(2)
 
-    # ── Pull planning payload ──
+    # ── Pull planning payload as CSV (the /export endpoint is stable —
+    # the JSON /planning/data endpoint sometimes 500s) ──
     if args.mock:
         with open(args.mock) as f:
-            planning = json.load(f)
-        print(f"Loaded mock planning data from {args.mock}")
+            csv_text = f.read()
+        print(f"Loaded mock planning CSV from {args.mock}")
     else:
         if not all(k in os.environ for k in ("KILNFIRE_URL", "KILNFIRE_USER", "KILNFIRE_PASS")):
             print("KILNFIRE_URL / KILNFIRE_USER / KILNFIRE_PASS must be set for live scrape.")
             sys.exit(2)
         session, token, base = login_session()
-        planning = fetch_planning(session, token, base)
-        print(f"Fetched planning from {base}")
+        csv_text = fetch_planning_csv(session, token, base)
+        print(f"Fetched planning CSV from {base} ({len(csv_text)} bytes)")
 
-    classes = planning.get("classes") or planning.get("data") or planning
-    if not isinstance(classes, list):
-        print(f"Unexpected planning shape: {type(classes).__name__}")
-        sys.exit(1)
+    classes = list(csv.DictReader(io.StringIO(csv_text)))
     print(f"Total classes in payload: {len(classes)}")
 
     # ── Filter past N days, status finished, mappable template ──
