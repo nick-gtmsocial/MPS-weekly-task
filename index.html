@@ -86,6 +86,7 @@ a:hover{text-decoration:underline}
 .planner-chip.active{background:var(--teal);color:#fff;border-color:var(--teal)}
 .planner-done-toggle{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);cursor:pointer;user-select:none}
 .planner-done-toggle input{cursor:pointer}
+.planner-toolbar-right{display:flex;align-items:center;gap:14px}
 .planner-day{background:var(--surface);border-radius:10px;margin-bottom:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06)}
 .planner-day-head{background:#F3F4F6;padding:8px 14px;font-size:12px;font-weight:700;color:var(--teal-dark);text-transform:uppercase;letter-spacing:.5px;display:flex;justify-content:space-between;align-items:center}
 .planner-day-count{background:#fff;color:var(--muted);padding:1px 8px;border-radius:10px;font-size:10px}
@@ -984,10 +985,13 @@ function renderPlannerTab() {
   document.getElementById('planner-toolbar').innerHTML = `
     <div class="planner-toolbar">
       <div class="planner-chip-row">${staffPills}</div>
-      <label class="planner-done-toggle">
-        <input type="checkbox" ${plannerFilter.showDone ? 'checked' : ''} onchange="setPlannerFilter({showDone: this.checked})">
-        Show done
-      </label>
+      <div class="planner-toolbar-right">
+        <label class="planner-done-toggle">
+          <input type="checkbox" ${plannerFilter.showDone ? 'checked' : ''} onchange="setPlannerFilter({showDone: this.checked})">
+          Show done
+        </label>
+        <button class="btn btn-primary btn-sm" onclick="openAddManualTaskModal()">+ Add Task</button>
+      </div>
     </div>`;
 
   // Filter + bucket tasks by due_date
@@ -1059,6 +1063,65 @@ async function assignPlannerTask(id, assignee) {
     await loadWeek(weekKey(currentWeekStart));
     renderPlannerTab();
   } catch (e) { alert(`Couldn't reassign: ${e.message}`); }
+}
+
+// Add a manual one-off task to the current week's queue. Anyone can do
+// this — the task lives in weekly_tasks with source_kind='manual' so it
+// shows up in the Planner + My Week views like any other task, but
+// isn't tied to a class or template.
+function openAddManualTaskModal() {
+  const key = weekKey(currentWeekStart);
+  const todayIso = new Date().toISOString().slice(0, 10);
+  // Default due-date: today if today is in the viewed week, else the Monday.
+  const inWeek = todayIso >= key && todayIso <= addDaysIso(key, 6);
+  const defaultDue = inWeek ? todayIso : key;
+  const ownerOpts = '<option value="">— unassigned —</option>' +
+    STAFF.map(s => `<option value="${s.id}" ${s.id === currentUser ? 'selected' : ''}>${s.name}</option>`).join('');
+  modalState = { type: 'addManualTask' };
+  openModal(`
+    <div class="modal-header"><h3>Add task</h3></div>
+    <div class="modal-body">
+      <div class="form-field"><label>Title</label>
+        <input type="text" id="mt-title" placeholder="e.g. Restock underglaze brushes" autofocus></div>
+      <div class="form-field"><label>Owner</label>
+        <select id="mt-owner">${ownerOpts}</select></div>
+      <div class="form-field"><label>Due date</label>
+        <input type="date" id="mt-due" value="${defaultDue}" min="${key}" max="${addDaysIso(key, 6)}"></div>
+      <div class="form-field"><label>Notes (optional)</label>
+        <textarea id="mt-notes" rows="2" placeholder="Anything that helps the assignee"></textarea></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary"   onclick="saveManualTask()">Add</button>
+    </div>`);
+}
+
+// Helper used by the modal — returns ISO of date+offset, like the engine.
+function addDaysIso(iso, n) {
+  const d = new Date(`${iso}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+async function saveManualTask() {
+  const title = document.getElementById('mt-title').value.trim();
+  if (!title) { alert('Title is required.'); return; }
+  const dueDate = document.getElementById('mt-due').value || null;
+  const owner   = document.getElementById('mt-owner').value || null;
+  const notes   = document.getElementById('mt-notes').value.trim() || null;
+  // Snap week_key to the Monday of the chosen due date.
+  const dueObj  = new Date(`${dueDate || weekKey(currentWeekStart)}T12:00:00Z`);
+  const dow     = dueObj.getUTCDay();
+  const wkOffset = dow === 0 ? -6 : 1 - dow;
+  dueObj.setUTCDate(dueObj.getUTCDate() + wkOffset);
+  const wk = dueObj.toISOString().slice(0, 10);
+
+  closeModal();
+  try {
+    await api('addManualWeeklyTask', { weekKey: wk, dueDate, title, assignee: owner, notes });
+    await loadWeek(weekKey(currentWeekStart));
+    renderAll();
+  } catch (e) { alert(`Couldn't add task: ${e.message}`); }
 }
 
 // ── GOALS TAB ──────────────────────────────────
