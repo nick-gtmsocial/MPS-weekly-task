@@ -123,14 +123,8 @@ a:hover{text-decoration:underline}
 .cal-cell-num{font-size:13px;font-weight:600;color:var(--text)}
 .cal-cell-count{position:absolute;top:6px;right:8px;background:var(--teal);color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:8px;min-width:18px;text-align:center}
 .cal-cell-phases{display:flex;gap:3px;flex-wrap:wrap;margin-top:auto}
-.cal-chip{width:8px;height:8px;border-radius:50%;display:inline-block}
-.cal-chip.done{opacity:.35}
-.cal-chip-process,.cal-chip-prep,.cal-chip-class{background:#9CA3AF}
-.cal-chip-bisque{background:#F59E0B}
-.cal-chip-glaze{background:#A855F7}
-.cal-chip-glazefire{background:#7C3AED}
-.cal-chip-finish{background:#10B981}
-.cal-chip-recurring{background:#0EA5E9}
+.cal-chip{width:9px;height:9px;border-radius:50%;display:inline-block;border:1px solid rgba(0,0,0,.06)}
+.cal-chip.done{opacity:.3}
 .cal-chip-more{font-size:9px;font-weight:700;color:var(--muted);align-self:center;line-height:1}
 
 .cal-day-panel{background:var(--surface);border-radius:8px;padding:14px 18px;margin-top:14px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
@@ -1262,7 +1256,7 @@ function renderCalendarTab() {
     const isSelected = iso === calendarSelectedDay;
     const isWeekend = d.getUTCDay() === 0 || d.getUTCDay() === 6;
 
-    const phaseChips = summarizePhases(dayTasks);
+    const phaseChips = summarizeOwners(dayTasks);
     const cls = [
       'cal-cell',
       !inMonth   ? 'other-month' : '',
@@ -1296,20 +1290,28 @@ function renderCalendarTab() {
   }
 }
 
-// Summarise the day's tasks as a stack of small phase-coloured chips.
-// Show up to 4; collapse the rest into a +N counter.
-function summarizePhases(tasks) {
+// Summarise the day's tasks as a stack of owner-coloured dots — the
+// header legend already maps each staff colour, so the calendar
+// inherits the same visual language ("who's busy on Monday?" at a
+// glance). Unassigned tasks get a neutral grey. Done tasks dim.
+function summarizeOwners(tasks) {
   if (!tasks.length) return '';
-  const order = ['process','bisque','glaze','glaze-fire','finish','prep','class'];
-  const phaseClass = p => p ? `cal-chip-${p.replace(/[^a-z-]/g,'')}` : 'cal-chip-recurring';
+  // Stable ordering: by assignee's STAFF sort_idx so the same owner
+  // always shows up in the same column position across days.
+  const staffIdx = new Map(STAFF.map((s, i) => [s.id, i]));
   const sorted = [...tasks].sort((a, b) => {
-    const ia = order.indexOf(a.phase) === -1 ? 999 : order.indexOf(a.phase);
-    const ib = order.indexOf(b.phase) === -1 ? 999 : order.indexOf(b.phase);
-    return ia - ib;
+    const ai = staffIdx.has(a.assignee) ? staffIdx.get(a.assignee) : 999;
+    const bi = staffIdx.has(b.assignee) ? staffIdx.get(b.assignee) : 999;
+    return ai - bi;
   });
   const visible = sorted.slice(0, 4);
   const extra   = sorted.length - visible.length;
-  const chips   = visible.map(t => `<span class="cal-chip ${phaseClass(t.phase)} ${t.status === 'done' ? 'done' : ''}" title="${escapeAttr(t.title)}"></span>`).join('');
+  const chips = visible.map(t => {
+    const staff = t.assignee && STAFF.find(s => s.id === t.assignee);
+    const color = staff?.color || '#9CA3AF';                                    // unassigned = grey
+    const tip   = staff ? `${staff.name}: ${t.title}` : `Unassigned: ${t.title}`;
+    return `<span class="cal-chip ${t.status === 'done' ? 'done' : ''}" style="background:${color}" title="${escapeAttr(tip)}"></span>`;
+  }).join('');
   return chips + (extra > 0 ? `<span class="cal-chip-more">+${extra}</span>` : '');
 }
 
