@@ -337,6 +337,44 @@ const OPS = {
     return shapeWeeklyTask(row);
   },
 
+  // Move a task's due date. Recomputes week_key (Monday of new due_date)
+  // and batch_key (when the task is batchable, the key follows the new
+  // week so the task rejoins the right batch — or starts a new one if
+  // no others land in that week).
+  async setWeeklyTaskDueDate({ id, dueDate }) {
+    requireFields({ id, dueDate });
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
+      const err = new Error('dueDate must be YYYY-MM-DD');
+      err.status = 400;
+      throw err;
+    }
+
+    // Snap to Monday for week_key.
+    const d = new Date(`${dueDate}T12:00:00Z`);
+    const dow = d.getUTCDay();
+    d.setUTCDate(d.getUTCDate() + (dow === 0 ? -6 : 1 - dow));
+    const weekKey = d.toISOString().slice(0, 10);
+
+    // Read the existing row to know whether to keep batching.
+    const [current] = await sbGet(`weekly_tasks?id=eq.${id}&select=phase,batch_key`);
+    if (!current) {
+      const err = new Error(`weekly_task not found: ${id}`);
+      err.status = 404;
+      throw err;
+    }
+    const newBatchKey = current.batch_key
+      ? `${current.phase || 'task'}-${weekKey}`
+      : null;
+
+    const [row] = await sbPatch(`weekly_tasks?id=eq.${id}`, {
+      due_date:   dueDate,
+      week_key:   weekKey,
+      batch_key:  newBatchKey,
+      updated_at: new Date().toISOString(),
+    });
+    return shapeWeeklyTask(row);
+  },
+
   async addManualWeeklyTask({ weekKey, dueDate, title, assignee, durationMinutes, notes }) {
     requireFields({ weekKey, title });
     const [row] = await sbPost('weekly_tasks', {

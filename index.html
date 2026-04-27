@@ -90,7 +90,10 @@ a:hover{text-decoration:underline}
 .planner-day{background:var(--surface);border-radius:10px;margin-bottom:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06)}
 .planner-day-head{background:#F3F4F6;padding:8px 14px;font-size:12px;font-weight:700;color:var(--teal-dark);text-transform:uppercase;letter-spacing:.5px;display:flex;justify-content:space-between;align-items:center}
 .planner-day-count{background:#fff;color:var(--muted);padding:1px 8px;border-radius:10px;font-size:10px}
-.planner-row{display:grid;grid-template-columns:auto 1fr auto auto auto auto;gap:10px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border);font-size:13px}
+.planner-row{display:grid;grid-template-columns:auto 1fr auto auto auto auto auto;gap:10px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border);font-size:13px}
+.task-date-input{font-size:11px;border:1px solid var(--border);border-radius:5px;padding:3px 6px;background:#fff;color:var(--text);cursor:pointer;font-family:inherit}
+.task-date-input:hover{border-color:var(--teal)}
+.task-date-input:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 2px var(--teal-light)}
 .planner-row:last-child{border-bottom:none}
 .planner-row.is-done{opacity:.55}
 .planner-row.is-done .planner-row-title{text-decoration:line-through;color:var(--muted)}
@@ -130,7 +133,7 @@ a:hover{text-decoration:underline}
 .cal-day-panel{background:var(--surface);border-radius:8px;padding:14px 18px;margin-top:14px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
 .cal-day-panel h3{font-size:14px;font-weight:700;color:var(--teal-dark);margin-bottom:10px;display:flex;align-items:center;gap:10px}
 .cal-day-count{font-size:11px;font-weight:600;background:#F3F4F6;color:var(--muted);padding:2px 8px;border-radius:10px}
-.cal-day-row{display:grid;grid-template-columns:1fr auto auto auto;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px}
+.cal-day-row{display:grid;grid-template-columns:1fr auto auto auto auto;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px}
 .cal-day-row:last-child{border-bottom:none}
 .cal-day-row.is-done{opacity:.55}
 .cal-day-row.is-done .cal-day-row-title{text-decoration:line-through;color:var(--muted)}
@@ -942,6 +945,12 @@ function renderMyWeekTab() {
       ? `<button class="me-card-done ${isDone ? 'is-done' : ''}" title="${isDone ? 'Un-mark done' : 'Mark done'}" onclick="event.stopPropagation(); toggleWeeklyTaskDone('${item.doneId}', '${item.status}', this)">✓</button>`
       : '';
     const batchPill = item.batched ? `<span class="me-card-batch">batch</span>` : '';
+    // Auto-generated weekly_tasks (item.doneId set) get an editable date
+    // input. Goal/special items render the static dayLabel and rely on
+    // their card-click → edit modal to change deadlines.
+    const dateField = item.doneId
+      ? `<input type="date" class="task-date-input" value="${item.dateIso || ''}" title="Move to a different day" onclick="event.stopPropagation()" onchange="event.stopPropagation(); changeTaskDueDate('${item.doneId}', this.value)">`
+      : (item.dayLabel ? `<span class="me-card-day">${item.dayLabel}</span>` : '');
     return `<div class="me-card ${cls} ${isDone ? 'is-done' : ''}" ${cardOnClick}>
       <span class="me-card-source ${item.source}">${sourceLabel(item.source)}</span>
       <div class="me-card-main">
@@ -950,7 +959,7 @@ function renderMyWeekTab() {
       </div>
       <div class="me-card-meta">
         ${batchPill}
-        ${item.dayLabel ? `<span class="me-card-day">${item.dayLabel}</span>` : ''}
+        ${dateField}
         <span class="me-card-status ${item.status}">${STATUS_LABELS[item.status] || item.status}</span>
         ${doneBtn}
       </div>
@@ -1100,6 +1109,7 @@ function renderPlannerRow(t) {
         ${t.notes ? `<div class="planner-row-notes">${t.notes}</div>` : ''}
       </div>
       ${batchPill}
+      <input type="date" class="task-date-input" value="${t.dueDate || ''}" title="Due date" onchange="changeTaskDueDate('${t.id}', this.value)">
       <select class="planner-owner" onchange="assignPlannerTask('${t.id}', this.value)">${opts}</select>
       <span class="me-card-status ${t.status}">${STATUS_LABELS[t.status] || t.status}</span>
       <button class="me-card-done ${isDone ? 'is-done' : ''}" title="${isDone ? 'Un-mark done' : 'Mark done'}"
@@ -1113,6 +1123,25 @@ async function assignPlannerTask(id, assignee) {
     await loadWeek(weekKey(currentWeekStart));
     renderPlannerTab();
   } catch (e) { alert(`Couldn't reassign: ${e.message}`); }
+}
+
+// Shared due-date editor. Wired from Planner, Calendar, and My Week.
+// After the API call we refetch whichever data the active tab depends on.
+async function changeTaskDueDate(id, newDate) {
+  if (!newDate) return;
+  try {
+    await api('setWeeklyTaskDueDate', { id, dueDate: newDate });
+    if (activeTab === 'calendar') {
+      calendarLoadedKey = null;        // force the month to refetch
+      await renderCalendarTabAsync();
+    } else {
+      // Reload the currently-viewed week. The task may have moved out
+      // of this week entirely — that's expected; user sees the change
+      // when they navigate.
+      await loadWeek(weekKey(currentWeekStart));
+      renderAll();
+    }
+  } catch (e) { alert(`Couldn't move task: ${e.message}`); }
 }
 
 // Add a manual one-off task to the current week's queue. Anyone can do
@@ -1328,6 +1357,7 @@ function renderCalendarDayPanel(iso, tasks) {
     return `
       <div class="cal-day-row ${isDone ? 'is-done' : ''}">
         <div class="cal-day-row-title">${t.title}${classLabel}</div>
+        <input type="date" class="task-date-input" value="${t.dueDate || ''}" title="Move to a different day" onchange="changeTaskDueDate('${t.id}', this.value)">
         <span class="me-card-status ${t.status}">${STATUS_LABELS[t.status] || t.status}</span>
         <span class="cal-day-row-owner" ${ownerStaff ? `style="background:${ownerStaff.color}22;color:${ownerStaff.color}"` : ''}>${ownerLabel}</span>
         <button class="me-card-done ${isDone ? 'is-done' : ''}" title="${isDone ? 'Un-mark done' : 'Mark done'}"
