@@ -81,6 +81,38 @@ export async function generateApi(op, payload = {}) {
   return res.json();
 }
 
+export async function adminApi(op, payload = {}) {
+  const res = await fetch(`${BASE}/api/admin`, {
+    method:  'POST',
+    headers: { 'Authorization': `Bearer ${PW}`, 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ op, ...payload }),
+  });
+  if (!res.ok) throw new Error(`admin ${op} failed: ${res.status} ${await res.text()}`);
+  return res.json();
+}
+
+export async function fetchStaff() {
+  const res = await fetch(`${BASE}/api/admin?resource=staff`, {
+    headers: { 'Authorization': `Bearer ${PW}` },
+  });
+  if (!res.ok) throw new Error(`fetchStaff failed: ${res.status}`);
+  return res.json();
+}
+
+// Test staff prefix — keeps cleanup safe: only delete rows that match
+// this prefix so we never wipe real staff if a test crashes mid-run.
+export const TEST_STAFF_PREFIX = 'test-';
+
+export async function wipeTestStaff() {
+  const { staff } = await fetchStaff();
+  for (const s of staff) {
+    if (s.id.startsWith(TEST_STAFF_PREFIX)) {
+      try { await adminApi('deleteStaff', { id: s.id }); }
+      catch { /* ignored — FK may pin them; tests should not assign tasks to test staff */ }
+    }
+  }
+}
+
 // Wait until the week bundle satisfies the predicate, polling the API.
 export async function waitForWeek(predicate, { timeoutMs = 5_000, intervalMs = 250 } = {}) {
   const deadline = Date.now() + timeoutMs;

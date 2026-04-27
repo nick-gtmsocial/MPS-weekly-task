@@ -1050,11 +1050,13 @@ function renderPlannerTab() {
   const week = getWeek(key);
   const dates = getWeekDates(currentWeekStart);
 
-  // Toolbar — staff filter + show-done toggle
+  // Toolbar — staff filter + show-done toggle. Use single-quoted strings
+  // inside the onclick attribute to avoid breaking the surrounding
+  // double-quoted attribute when ids contain special chars.
   const staffPills = ['', ...STAFF.map(s => s.id)].map(id => {
     const active = plannerFilter.staff === id;
     const label  = id ? STAFF.find(s => s.id === id).name : 'All staff';
-    return `<button class="planner-chip ${active ? 'active' : ''}" onclick="setPlannerFilter({staff: ${JSON.stringify(id)}})">${label}</button>`;
+    return `<button class="planner-chip ${active ? 'active' : ''}" onclick="setPlannerFilter({staff: '${id}'})">${label}</button>`;
   }).join('');
 
   document.getElementById('planner-toolbar').innerHTML = `
@@ -2585,6 +2587,11 @@ window.__jumpToWeek = async (key) => {
   await loadWeek(key);
   renderAll();
 };
+
+// Test-only introspection. Top-level `let` bindings aren't on window,
+// so evaluate() can't reach them — this is the supported access path.
+window.__getDb = () => db;
+window.__getStaff = () => STAFF;
 </script>
 </body>
 </html>
