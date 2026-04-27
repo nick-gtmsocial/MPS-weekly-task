@@ -471,7 +471,12 @@ a:hover{text-decoration:underline}
 // STAFF & TASK DATA
 // ════════════════════════════════════════════════
 
-const STAFF = [
+// STAFF starts with this fallback list for instant first paint, then
+// gets replaced with the live row set from /api/admin?resource=staff in
+// loadStaff() during init. Keep this in sync-ish with the seed in the
+// staff table — but the DB is source of truth, so adds/removals via
+// the manage-staff skill don't need a code change here.
+let STAFF = [
   { id:'kizza',  name:'Kizza',  color:'#0D9488', initial:'K'  },
   { id:'cielo',  name:'Cielo',  color:'#0891B2', initial:'C'  },
   { id:'nick',   name:'Nick',   color:'#7C3AED', initial:'N'  },
@@ -639,6 +644,19 @@ async function loadWeek(key) {
   };
   loadedWeeks.add(key);
   return db.weeks[key];
+}
+
+// Refresh the STAFF list from the server. Active staff only, sorted by
+// sort_idx. Falls back silently to the hard-coded list if the API fails
+// (e.g. during initial migration on a brand-new deploy).
+async function loadStaff() {
+  try {
+    const result = await apiRequest('GET', '/api/admin?resource=staff');
+    const live = (result.staff || []).filter(s => s.active !== false);
+    if (live.length) STAFF = live;
+  } catch (e) {
+    console.warn('loadStaff failed; using fallback list', e);
+  }
 }
 
 // Fetch all goals + templates. Called on first visit to the Goals tab and
@@ -2526,9 +2544,18 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   syncTabButtons();
-  renderAll();                              // initial render with empty slot so UI is visible
+  renderAll();                              // initial render with the fallback STAFF
   await loadCurrentWeek();
-  renderAll();                              // re-render with fetched data
+  renderAll();                              // re-render with fetched week data
+
+  // Refresh staff list in the background once everything else has settled.
+  // If new members exist (or someone changed colors), re-render the legend
+  // and user selector — but don't re-render the whole tab body to avoid
+  // racing in-flight user actions.
+  loadStaff().then(() => {
+    renderLegend();
+    renderUserSelector();
+  });
 });
 
 // Keep the URL hash in sync with the active tab so deep-links work both

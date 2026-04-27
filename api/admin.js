@@ -37,7 +37,13 @@ async function handleGet(req, res) {
       recurringTasks: rows.map(shapeRecurringTask),
     });
   }
-  return res.status(400).json({ error: 'resource must be "class-types" or "recurring-tasks"' });
+  if (resource === 'staff') {
+    const rows = await sbGet('staff?select=*&order=sort_idx.asc');
+    return res.status(200).json({
+      staff: rows.map(shapeStaff),
+    });
+  }
+  return res.status(400).json({ error: 'resource must be "class-types", "recurring-tasks", or "staff"' });
 }
 
 async function handlePost(req, res) {
@@ -119,6 +125,35 @@ const OPS = {
     return { ok: true };
   },
 
+  // ── Staff CRUD (used by the manage-staff skill) ──
+  // Add or update a staff member by id. Auto-derives id from name if not
+  // given (lowercased first word). Color and initial fall back to sane
+  // defaults if omitted.
+  async upsertStaff({ id, name, color, initial, sortIdx, active }) {
+    requireFields({ name });
+    const finalId = (id || name.toLowerCase().split(/\s+/)[0]).trim();
+    const finalInitial = (initial || name.trim()[0] || '?').toUpperCase().slice(0, 2);
+    const finalColor = color || '#9CA3AF';
+    await sbPost('staff?on_conflict=id', {
+      id:       finalId,
+      name,
+      color:    finalColor,
+      initial:  finalInitial,
+      sort_idx: sortIdx ?? 99,
+      active:   active !== false,
+    }, { upsert: true, returning: 'minimal' });
+    return { id: finalId, name, color: finalColor, initial: finalInitial };
+  },
+
+  // Hard delete. Will fail if any FK references the staff id (e.g. the
+  // staff has special_tasks pointing to them). For routine deactivation
+  // prefer upsertStaff with active=false.
+  async deleteStaff({ id }) {
+    requireFields({ id });
+    await sbDelete(`staff?id=eq.${id}`);
+    return { ok: true };
+  },
+
   // Audit log written by sync-kilnfire.py at the end of each run.
   async logKilnfireScrape({ classes_pulled, classes_inserted, classes_skipped, errors, notes }) {
     const [row] = await sbPost('kilnfire_scrapes', {
@@ -170,6 +205,17 @@ function shapeRecurringTask(r) {
     durationMinutes:  r.duration_minutes,
     notes:            r.notes,
     active:           r.active,
+  };
+}
+
+function shapeStaff(r) {
+  return {
+    id:       r.id,
+    name:     r.name,
+    color:    r.color,
+    initial:  r.initial,
+    active:   r.active,
+    sortIdx:  r.sort_idx,
   };
 }
 
