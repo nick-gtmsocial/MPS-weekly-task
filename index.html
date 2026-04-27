@@ -1079,7 +1079,9 @@ function renderPlannerTab() {
 
 function renderPlannerRow(t) {
   const isDone = t.status === 'done';
-  const classLabel = t.classType ? ` · ${t.classType}` : '';
+  const classLabel = t.classType
+    ? ` · ${t.classType}${t.classDate ? ' · ' + fmtShortDate(t.classDate) : ''}`
+    : '';
   const batchPill  = t.batchKey ? `<span class="me-card-batch">batch</span>` : '';
   const sourceCls  = t.sourceKind === 'recurring' ? 'recurring' : 'task';
   const sourceText = t.sourceKind === 'recurring' ? 'Chore' : 'Task';
@@ -1320,7 +1322,9 @@ function renderCalendarDayPanel(iso, tasks) {
     const isDone     = t.status === 'done';
     const ownerStaff = t.assignee && STAFF.find(s => s.id === t.assignee);
     const ownerLabel = ownerStaff ? ownerStaff.name : '— unassigned —';
-    const classLabel = t.classType ? ` · ${t.classType}` : '';
+    const classLabel = t.classType
+      ? ` · ${t.classType}${t.classDate ? ' · ' + fmtShortDate(t.classDate) : ''}`
+      : '';
     return `
       <div class="cal-day-row ${isDone ? 'is-done' : ''}">
         <div class="cal-day-row-title">${t.title}${classLabel}</div>
