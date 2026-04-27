@@ -100,6 +100,49 @@ a:hover{text-decoration:underline}
 .planner-owner{font-size:11px;font-weight:600;padding:4px 8px;border:1px solid var(--border);border-radius:5px;background:#fff;cursor:pointer;color:var(--text);min-width:90px}
 .planner-owner:hover{border-color:var(--teal)}
 
+/* ── CALENDAR ── */
+.cal-toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;background:var(--surface);padding:10px 14px;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.cal-month-nav{display:flex;align-items:center;gap:14px}
+.cal-month-nav button{background:transparent;border:1px solid var(--border);width:32px;height:32px;border-radius:6px;cursor:pointer;font-size:18px;color:var(--text);transition:all .15s}
+.cal-month-nav button:hover{border-color:var(--teal);color:var(--teal)}
+.cal-month-label{font-size:18px;font-weight:700;color:var(--teal-dark);min-width:160px;text-align:center}
+.cal-grid{background:var(--surface);border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.cal-grid-header{display:grid;grid-template-columns:repeat(7,1fr);background:var(--teal-dark);color:#fff;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+.cal-day-header{padding:8px 10px;text-align:center}
+.cal-grid-body{display:grid;grid-template-columns:repeat(7,1fr);grid-auto-rows:minmax(96px,auto)}
+.cal-cell{position:relative;border-right:1px solid var(--border);border-bottom:1px solid var(--border);padding:6px 8px;cursor:pointer;background:#fff;display:flex;flex-direction:column;gap:4px;transition:background .15s}
+.cal-cell:nth-child(7n){border-right:none}
+.cal-cell:hover{background:#FAFAF7}
+.cal-cell.other-month{background:#F9F9F6;color:var(--muted)}
+.cal-cell.other-month .cal-cell-num{opacity:.5}
+.cal-cell.weekend{background:#F8F7F3}
+.cal-cell.weekend.other-month{background:#F4F4F0}
+.cal-cell.today{background:#CCFBF1}
+.cal-cell.today .cal-cell-num{color:var(--teal-dark);font-weight:800}
+.cal-cell.selected{background:#FEF3C7;outline:2px solid #F59E0B;outline-offset:-2px;z-index:1}
+.cal-cell-num{font-size:13px;font-weight:600;color:var(--text)}
+.cal-cell-count{position:absolute;top:6px;right:8px;background:var(--teal);color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:8px;min-width:18px;text-align:center}
+.cal-cell-phases{display:flex;gap:3px;flex-wrap:wrap;margin-top:auto}
+.cal-chip{width:8px;height:8px;border-radius:50%;display:inline-block}
+.cal-chip.done{opacity:.35}
+.cal-chip-process,.cal-chip-prep,.cal-chip-class{background:#9CA3AF}
+.cal-chip-bisque{background:#F59E0B}
+.cal-chip-glaze{background:#A855F7}
+.cal-chip-glazefire{background:#7C3AED}
+.cal-chip-finish{background:#10B981}
+.cal-chip-recurring{background:#0EA5E9}
+.cal-chip-more{font-size:9px;font-weight:700;color:var(--muted);align-self:center;line-height:1}
+
+.cal-day-panel{background:var(--surface);border-radius:8px;padding:14px 18px;margin-top:14px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.cal-day-panel h3{font-size:14px;font-weight:700;color:var(--teal-dark);margin-bottom:10px;display:flex;align-items:center;gap:10px}
+.cal-day-count{font-size:11px;font-weight:600;background:#F3F4F6;color:var(--muted);padding:2px 8px;border-radius:10px}
+.cal-day-row{display:grid;grid-template-columns:1fr auto auto auto;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px}
+.cal-day-row:last-child{border-bottom:none}
+.cal-day-row.is-done{opacity:.55}
+.cal-day-row.is-done .cal-day-row-title{text-decoration:line-through;color:var(--muted)}
+.cal-day-row-title{font-weight:500;color:var(--text)}
+.cal-day-row-owner{font-size:11px;font-weight:600;padding:3px 8px;border-radius:4px;background:#F3F4F6;color:var(--muted)}
+
 /* ── GOALS TAB ── */
 .goal-card{background:var(--surface);border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.08);margin-bottom:12px;overflow:hidden}
 .goal-card-head{padding:14px 18px;display:grid;grid-template-columns:1fr auto auto;gap:14px;align-items:center;cursor:pointer}
@@ -326,6 +369,7 @@ a:hover{text-decoration:underline}
 <nav class="tabs">
   <button class="tab-btn" data-tab="me"       onclick="switchTab('me')">My Week</button>
   <button class="tab-btn" data-tab="planner"  onclick="switchTab('planner')">Planner</button>
+  <button class="tab-btn" data-tab="calendar" onclick="switchTab('calendar')">Calendar</button>
   <button class="tab-btn active" data-tab="tasks"   onclick="switchTab('tasks')">Weekly Tasks</button>
   <button class="tab-btn" data-tab="classes"  onclick="switchTab('classes')">Classes</button>
   <button class="tab-btn" data-tab="special"  onclick="switchTab('special')">Special Tasks</button>
@@ -351,6 +395,13 @@ a:hover{text-decoration:underline}
     </div>
     <div id="planner-toolbar"></div>
     <div id="planner-content"></div>
+  </div>
+
+  <!-- CALENDAR -->
+  <div id="tab-calendar" class="tab-panel">
+    <div id="calendar-toolbar"></div>
+    <div id="calendar-grid"></div>
+    <div id="calendar-day-tasks"></div>
   </div>
 
   <!-- TASKS -->
@@ -700,6 +751,8 @@ function switchTab(tab) {
   activeTab = tab;
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === `tab-${tab}`));
+  // Update the URL hash without firing the hashchange listener (avoid recursion).
+  if (location.hash !== `#${tab}`) history.replaceState(null, '', `#${tab}`);
   renderTabContent(tab);
 }
 
@@ -715,6 +768,7 @@ function renderAll() {
 function renderTabContent(tab) {
   if (tab === 'me')       renderMyWeekTab();
   if (tab === 'planner')  renderPlannerTab();
+  if (tab === 'calendar') renderCalendarTabAsync();
   if (tab === 'tasks')    renderTasksTab();
   if (tab === 'classes')  renderClassesTab();
   if (tab === 'special')  renderSpecialTab();
@@ -1122,6 +1176,200 @@ async function saveManualTask() {
     await loadWeek(weekKey(currentWeekStart));
     renderAll();
   } catch (e) { alert(`Couldn't add task: ${e.message}`); }
+}
+
+// ── CALENDAR TAB ───────────────────────────────
+
+// State for the Calendar tab. calendarMonth is the visible month;
+// calendarTasks holds the fetched range; calendarSelectedDay drives
+// the day-detail panel below the grid.
+let calendarMonth = (() => {
+  const d = new Date();
+  return { year: d.getFullYear(), month: d.getMonth() };
+})();
+let calendarTasks       = null;
+let calendarSelectedDay = null;
+let calendarLoadedKey   = null;        // 'YYYY-MM' of last-fetched range
+
+async function renderCalendarTabAsync() {
+  const key = `${calendarMonth.year}-${String(calendarMonth.month + 1).padStart(2, '0')}`;
+  if (calendarLoadedKey !== key) {
+    document.getElementById('calendar-grid').innerHTML =
+      '<div class="empty-state"><div class="empty-icon">Loading…</div></div>';
+    try {
+      calendarTasks   = await loadCalendarRange();
+      calendarLoadedKey = key;
+    } catch (e) {
+      document.getElementById('calendar-grid').innerHTML =
+        `<div class="empty-state"><div class="empty-icon">Couldn't load</div><p>${e.message}</p></div>`;
+      return;
+    }
+  }
+  renderCalendarTab();
+}
+
+// Fetch tasks for the full visible 6-week grid (from-the-Monday-before to
+// 6 weeks later) so cells from prev/next month also have data.
+async function loadCalendarRange() {
+  const monthStart = new Date(Date.UTC(calendarMonth.year, calendarMonth.month, 1, 12));
+  const dow        = monthStart.getUTCDay();
+  const offset     = dow === 0 ? -6 : 1 - dow;
+  const gridStart  = new Date(monthStart); gridStart.setUTCDate(gridStart.getUTCDate() + offset);
+  const gridEnd    = new Date(gridStart);  gridEnd.setUTCDate(gridEnd.getUTCDate() + 41);
+  const fromIso = gridStart.toISOString().slice(0, 10);
+  const toIso   = gridEnd.toISOString().slice(0, 10);
+  const data = await apiRequest('GET', `/api/calendar?from=${fromIso}&to=${toIso}`);
+  return data.tasks || [];
+}
+
+function renderCalendarTab() {
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const monthStart = new Date(Date.UTC(calendarMonth.year, calendarMonth.month, 1, 12));
+  const dow        = monthStart.getUTCDay();
+  const offset     = dow === 0 ? -6 : 1 - dow;
+  const gridStart  = new Date(monthStart); gridStart.setUTCDate(gridStart.getUTCDate() + offset);
+
+  // Group tasks by due_date for fast lookup
+  const byDay = new Map();
+  for (const t of calendarTasks || []) {
+    if (!byDay.has(t.dueDate)) byDay.set(t.dueDate, []);
+    byDay.get(t.dueDate).push(t);
+  }
+
+  // ── Toolbar ──
+  const monthLabel = `${MONTHS[calendarMonth.month]} ${calendarMonth.year}`;
+  document.getElementById('calendar-toolbar').innerHTML = `
+    <div class="cal-toolbar">
+      <div class="cal-month-nav">
+        <button onclick="changeCalendarMonth(-1)" title="Previous month">‹</button>
+        <span class="cal-month-label">${monthLabel}</span>
+        <button onclick="changeCalendarMonth(1)" title="Next month">›</button>
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="goToCalendarToday()">Today</button>
+    </div>`;
+
+  // ── Grid ──
+  const dayNames = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const headers = dayNames.map(d => `<div class="cal-day-header">${d}</div>`).join('');
+
+  const cells = [];
+  for (let i = 0; i < 42; i++) {
+    const d = new Date(gridStart); d.setUTCDate(d.getUTCDate() + i);
+    const iso = d.toISOString().slice(0, 10);
+    const dayTasks = byDay.get(iso) || [];
+    const inMonth = d.getUTCMonth() === calendarMonth.month;
+    const isToday = iso === todayIso;
+    const isSelected = iso === calendarSelectedDay;
+    const isWeekend = d.getUTCDay() === 0 || d.getUTCDay() === 6;
+
+    const phaseChips = summarizePhases(dayTasks);
+    const cls = [
+      'cal-cell',
+      !inMonth   ? 'other-month' : '',
+      isToday    ? 'today'       : '',
+      isSelected ? 'selected'    : '',
+      isWeekend  ? 'weekend'     : '',
+    ].filter(Boolean).join(' ');
+
+    cells.push(`
+      <div class="${cls}" onclick="selectCalendarDay('${iso}')">
+        <div class="cal-cell-num">${d.getUTCDate()}</div>
+        ${dayTasks.length ? `<div class="cal-cell-count">${dayTasks.length}</div>` : ''}
+        <div class="cal-cell-phases">${phaseChips}</div>
+      </div>`);
+  }
+
+  document.getElementById('calendar-grid').innerHTML = `
+    <div class="cal-grid">
+      <div class="cal-grid-header">${headers}</div>
+      <div class="cal-grid-body">${cells.join('')}</div>
+    </div>`;
+
+  // ── Day detail panel ──
+  if (calendarSelectedDay && byDay.has(calendarSelectedDay)) {
+    renderCalendarDayPanel(calendarSelectedDay, byDay.get(calendarSelectedDay));
+  } else if (calendarSelectedDay) {
+    document.getElementById('calendar-day-tasks').innerHTML =
+      `<div class="cal-day-panel"><h3>${fmtLongDate(calendarSelectedDay)}</h3><p class="help-text">No tasks scheduled.</p></div>`;
+  } else {
+    document.getElementById('calendar-day-tasks').innerHTML = '';
+  }
+}
+
+// Summarise the day's tasks as a stack of small phase-coloured chips.
+// Show up to 4; collapse the rest into a +N counter.
+function summarizePhases(tasks) {
+  if (!tasks.length) return '';
+  const order = ['process','bisque','glaze','glaze-fire','finish','prep','class'];
+  const phaseClass = p => p ? `cal-chip-${p.replace(/[^a-z-]/g,'')}` : 'cal-chip-recurring';
+  const sorted = [...tasks].sort((a, b) => {
+    const ia = order.indexOf(a.phase) === -1 ? 999 : order.indexOf(a.phase);
+    const ib = order.indexOf(b.phase) === -1 ? 999 : order.indexOf(b.phase);
+    return ia - ib;
+  });
+  const visible = sorted.slice(0, 4);
+  const extra   = sorted.length - visible.length;
+  const chips   = visible.map(t => `<span class="cal-chip ${phaseClass(t.phase)} ${t.status === 'done' ? 'done' : ''}" title="${escapeAttr(t.title)}"></span>`).join('');
+  return chips + (extra > 0 ? `<span class="cal-chip-more">+${extra}</span>` : '');
+}
+
+function renderCalendarDayPanel(iso, tasks) {
+  const rows = tasks.map(t => {
+    const isDone     = t.status === 'done';
+    const ownerStaff = t.assignee && STAFF.find(s => s.id === t.assignee);
+    const ownerLabel = ownerStaff ? ownerStaff.name : '— unassigned —';
+    const classLabel = t.classType ? ` · ${t.classType}` : '';
+    return `
+      <div class="cal-day-row ${isDone ? 'is-done' : ''}">
+        <div class="cal-day-row-title">${t.title}${classLabel}</div>
+        <span class="me-card-status ${t.status}">${STATUS_LABELS[t.status] || t.status}</span>
+        <span class="cal-day-row-owner" ${ownerStaff ? `style="background:${ownerStaff.color}22;color:${ownerStaff.color}"` : ''}>${ownerLabel}</span>
+        <button class="me-card-done ${isDone ? 'is-done' : ''}" title="${isDone ? 'Un-mark done' : 'Mark done'}"
+                onclick="toggleCalendarTaskDone('${t.id}', '${t.status}', this)">✓</button>
+      </div>`;
+  }).join('');
+  document.getElementById('calendar-day-tasks').innerHTML = `
+    <div class="cal-day-panel">
+      <h3>${fmtLongDate(iso)} <span class="cal-day-count">${tasks.length} task${tasks.length === 1 ? '' : 's'}</span></h3>
+      ${rows}
+    </div>`;
+}
+
+function selectCalendarDay(iso) {
+  calendarSelectedDay = iso;
+  renderCalendarTab();
+  // Scroll the panel into view on small screens
+  document.getElementById('calendar-day-tasks').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function changeCalendarMonth(dir) {
+  let { year, month } = calendarMonth;
+  month += dir;
+  if (month < 0)  { month = 11; year -= 1; }
+  if (month > 11) { month = 0;  year += 1; }
+  calendarMonth = { year, month };
+  calendarSelectedDay = null;
+  renderCalendarTabAsync();
+}
+
+function goToCalendarToday() {
+  const d = new Date();
+  calendarMonth = { year: d.getFullYear(), month: d.getMonth() };
+  calendarSelectedDay = d.toISOString().slice(0, 10);
+  renderCalendarTabAsync();
+}
+
+async function toggleCalendarTaskDone(id, currentStatus, btnEl) {
+  const nextStatus = currentStatus === 'done' ? 'todo' : 'done';
+  try {
+    await api('markWeeklyTaskDone', { id, status: nextStatus });
+    // Update the cached tasks in place so we don't refetch the whole month.
+    if (calendarTasks) {
+      const t = calendarTasks.find(x => x.id === id);
+      if (t) t.status = nextStatus;
+    }
+    renderCalendarTab();
+  } catch (e) { alert(`Couldn't update: ${e.message}`); }
 }
 
 // ── GOALS TAB ──────────────────────────────────
@@ -2233,10 +2481,28 @@ document.addEventListener('DOMContentLoaded', async () => {
   renderLegend();
   renderUserSelector();
   if (currentUser) activeTab = 'me';        // users land on their personal view
+
+  // URL hash overrides the default tab — supports #planner / #me / etc. so
+  // links can deep-link into a specific view.
+  const hashTab = (location.hash || '').replace(/^#/, '');
+  if (hashTab && document.querySelector(`[data-tab="${hashTab}"]`)) {
+    activeTab = hashTab;
+  }
+
   syncTabButtons();
   renderAll();                              // initial render with empty slot so UI is visible
   await loadCurrentWeek();
   renderAll();                              // re-render with fetched data
+});
+
+// Keep the URL hash in sync with the active tab so deep-links work both
+// ways (you click a tab, the URL updates; you reload the URL, you land on
+// that tab).
+window.addEventListener('hashchange', () => {
+  const tab = (location.hash || '').replace(/^#/, '');
+  if (tab && tab !== activeTab && document.querySelector(`[data-tab="${tab}"]`)) {
+    switchTab(tab);
+  }
 });
 
 // Keep the tab-button highlight in sync with activeTab; used when we flip the
