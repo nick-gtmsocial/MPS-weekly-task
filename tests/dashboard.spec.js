@@ -130,6 +130,46 @@ test('pieces: changing stage appends a stage_history entry', async ({ page }) =>
   expect(typeof updated.stageHistory[1].at).toBe('string');
 });
 
+test('special tasks: persist across week navigation (multi-week, not week-scoped)', async ({ page }) => {
+  // Add a special task for Nick — note its week_key is the test week,
+  // but the row is global and should be visible from any week's view.
+  await api('addSpecialTask', {
+    weekKey: TEST_WEEK_KEY,
+    staffId: 'nick',
+    title: 'Multi-week persistent task [TEST]',
+    deadline: '2099-01-15',                  // outside the test week
+    status: 'todo',
+  });
+  // Refetch the week so db.specialTasks picks up the new task before
+  // we render My Week.
+  await navigateToTestWeek(page);
+
+  await page.locator('#current-user-select').selectOption('nick');
+
+  // Visible on the test week (deadline is in week of Jan 12, not Jan 5)
+  await expect(page.locator('#me-content')).toContainText('Multi-week persistent task');
+
+  // Navigate forward two weeks — the special task should still be visible.
+  await page.evaluate(() => window.__jumpToWeek('2099-01-19'));
+  await expect(page.locator('#me-content')).toContainText('Multi-week persistent task');
+
+  // Special Tasks tab — the task is in Nick's column regardless of which
+  // week was viewed when navigating to the tab.
+  await page.locator('button[data-tab="special"]').click();
+  await expect(page.locator('.staff-card').filter({ hasText: 'Nick' }).getByText('Multi-week persistent task')).toBeVisible();
+
+  // And the Planner tab on the deadline's week shows it as a Special row.
+  await page.evaluate(() => window.__jumpToWeek('2099-01-12'));
+  await page.locator('button[data-tab="planner"]').click();
+  await expect(page.locator('.planner-row').filter({ hasText: 'Multi-week persistent task' })).toBeVisible();
+
+  // Cleanup
+  const bundle = await fetchWeek(TEST_WEEK_KEY);
+  for (const t of bundle.specialTasks || []) {
+    if (t.title.includes('[TEST]')) await api('deleteSpecialTask', { id: t.id });
+  }
+});
+
 test('special tasks: add a task for Nick, then append an update', async ({ page }) => {
   await page.locator('button[data-tab="special"]').click();
   await expect(page.locator('#tab-special.active')).toBeVisible();

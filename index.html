@@ -544,7 +544,7 @@ const STAGES = ['Greenware','Post-Process','Bisque','Underglaze','Glaze Fire','D
 
 let currentWeekStart = getMonday(new Date());
 let activeTab = 'tasks';
-let db = { weeks: {}, goals: [], templates: [] };
+let db = { weeks: {}, goals: [], templates: [], specialTasks: [] };
 let loadedWeeks = new Set();      // weeks we've fetched (regardless of emptiness)
 let goalsLoaded = false;          // one-time lazy load of goals + templates
 let modalState = null;
@@ -624,7 +624,7 @@ function setSyncStatus(state, detail) {
 
 // Ensure a week slot exists in the in-memory cache.
 function ensureWeekSlot(key) {
-  if (!db.weeks[key]) db.weeks[key] = { assignments:{}, specialTasks:[], classes:[], goalTasks:[] };
+  if (!db.weeks[key]) db.weeks[key] = { assignments:{}, classes:[], goalTasks:[], weeklyTasks:[] };
   return db.weeks[key];
 }
 
@@ -633,15 +633,18 @@ function ensureWeekSlot(key) {
 function getWeek(key) { return ensureWeekSlot(key); }
 
 // Fetch one week's state from the server and replace the in-memory slot.
+// specialTasks come back at the top level of the bundle (not in
+// db.weeks[key]) because they're multi-week and need to persist across
+// week navigation.
 async function loadWeek(key) {
   const bundle = await apiRequest('GET', `${API_URL}?week=${key}`);
   db.weeks[key] = {
     assignments:  bundle.assignments  || {},
-    specialTasks: bundle.specialTasks  || [],
     classes:      bundle.classes       || [],
     goalTasks:    bundle.goalTasks     || [],
     weeklyTasks:  bundle.weeklyTasks   || [],
   };
+  db.specialTasks = bundle.specialTasks || [];
   loadedWeeks.add(key);
   return db.weeks[key];
 }
@@ -888,7 +891,10 @@ function renderMyWeekTab() {
     }
   }
 
-  for (const t of week.specialTasks || []) {
+  // Special tasks are global (not week-scoped). Show all of mine that
+  // are still open or done in the visible week — the bucketing logic
+  // below sorts them into Overdue / Today / This week / Done as appropriate.
+  for (const t of (db.specialTasks || [])) {
     if (t.staffId !== currentUser) continue;
     myItems.push({
       source:   'special',
@@ -1071,13 +1077,36 @@ function renderPlannerTab() {
       </div>
     </div>`;
 
-  // Filter + bucket tasks by due_date
-  const all = (week.weeklyTasks || []).filter(t => {
-    if (t.sourceKind === 'goal' || t.sourceKind === 'special') return false;
-    if (!plannerFilter.showDone && t.status === 'done') return false;
-    if (plannerFilter.staff && t.assignee !== plannerFilter.staff) return false;
-    return true;
-  });
+  // Build the unified list. Auto-generated weekly_tasks first (excluding
+  // goal/special projections to avoid dupes); then global special tasks
+  // (any deadline) projected into the same row shape.
+  const all = [];
+  for (const t of (week.weeklyTasks || [])) {
+    if (t.sourceKind === 'goal' || t.sourceKind === 'special') continue;
+    if (!plannerFilter.showDone && t.status === 'done') continue;
+    if (plannerFilter.staff && t.assignee !== plannerFilter.staff) continue;
+    all.push(t);
+  }
+  for (const s of (db.specialTasks || [])) {
+    if (!plannerFilter.showDone && s.status === 'done') continue;
+    if (plannerFilter.staff && s.staffId !== plannerFilter.staff) continue;
+    // Project into a weekly_tasks-like shape so renderPlannerRow can
+    // handle uniformly. The id stays original; sourceKind='special'
+    // tells the row which API ops to call when the user edits.
+    all.push({
+      id:         s.id,
+      dueDate:    s.deadline,
+      title:      s.title,
+      assignee:   s.staffId,
+      status:     s.status,
+      sourceKind: 'special',
+      notes:      s.scope || null,
+      classType:  null,
+      classDate:  null,
+      batchKey:   null,
+      phase:      null,
+    });
+  }
 
   const host = document.getElementById('planner-content');
   if (!all.length) {
@@ -1085,17 +1114,28 @@ function renderPlannerTab() {
     return;
   }
 
+  // Group by due_date. Tasks without a deadline land in a "No date"
+  // bucket so they don't get lost.
   const byDay = new Map();
   for (const t of all) {
-    const d = t.dueDate || key;
+    const d = t.dueDate || '__no_date__';
     if (!byDay.has(d)) byDay.set(d, []);
     byDay.get(d).push(t);
   }
-  const sortedDays = [...byDay.keys()].sort();
+  const sortedDays = [...byDay.keys()].sort((a, b) => {
+    if (a === '__no_date__') return 1;       // push undated to the end
+    if (b === '__no_date__') return -1;
+    return a.localeCompare(b);
+  });
 
   const html = sortedDays.map(d => {
-    const dayDate = new Date(`${d}T12:00:00Z`);
-    const dayLabel = `${DAYS[(dayDate.getUTCDay() + 6) % 7]} · ${MONTHS[dayDate.getUTCMonth()]} ${dayDate.getUTCDate()}`;
+    let dayLabel;
+    if (d === '__no_date__') {
+      dayLabel = 'No deadline';
+    } else {
+      const dayDate = new Date(`${d}T12:00:00Z`);
+      dayLabel = `${DAYS[(dayDate.getUTCDay() + 6) % 7]} · ${MONTHS[dayDate.getUTCMonth()]} ${dayDate.getUTCDate()}`;
+    }
     return `
       <div class="planner-day">
         <div class="planner-day-head">${dayLabel}<span class="planner-day-count">${byDay.get(d).length}</span></div>
@@ -1112,11 +1152,15 @@ function renderPlannerRow(t) {
     ? ` · ${t.classType}${t.classDate ? ' · ' + fmtShortDate(t.classDate) : ''}`
     : '';
   const batchPill  = t.batchKey ? `<span class="me-card-batch">batch</span>` : '';
-  const sourceCls  = t.sourceKind === 'recurring' ? 'recurring' : 'task';
-  const sourceText = t.sourceKind === 'recurring' ? 'Chore' : 'Task';
 
-  // Owner select — change → assignWeeklyTask op. Built as a real <select>
-  // so users get the OS picker on mobile, not a custom modal.
+  let sourceCls, sourceText;
+  if (t.sourceKind === 'recurring')   { sourceCls = 'recurring'; sourceText = 'Chore'; }
+  else if (t.sourceKind === 'special'){ sourceCls = 'special';   sourceText = 'Special'; }
+  else                                { sourceCls = 'task';      sourceText = 'Task'; }
+
+  // Owner + done + date edit handlers branch by sourceKind so the right
+  // table is mutated (weekly_tasks for class/recurring/manual; special_tasks
+  // for special).
   const opts = ['<option value="">— unassigned —</option>']
     .concat(STAFF.map(s => `<option value="${s.id}" ${t.assignee === s.id ? 'selected' : ''}>${s.name}</option>`))
     .join('');
@@ -1129,12 +1173,59 @@ function renderPlannerRow(t) {
         ${t.notes ? `<div class="planner-row-notes">${t.notes}</div>` : ''}
       </div>
       ${batchPill}
-      <input type="date" class="task-date-input" value="${t.dueDate || ''}" title="Due date" onchange="changeTaskDueDate('${t.id}', this.value)">
-      <select class="planner-owner" onchange="assignPlannerTask('${t.id}', this.value)">${opts}</select>
+      <input type="date" class="task-date-input" value="${t.dueDate || ''}" title="Due date" onchange="plannerChangeDate('${t.id}', '${t.sourceKind}', this.value)">
+      <select class="planner-owner" onchange="plannerReassign('${t.id}', '${t.sourceKind}', this.value)">${opts}</select>
       <span class="me-card-status ${t.status}">${STATUS_LABELS[t.status] || t.status}</span>
       <button class="me-card-done ${isDone ? 'is-done' : ''}" title="${isDone ? 'Un-mark done' : 'Mark done'}"
-              onclick="toggleWeeklyTaskDone('${t.id}', '${t.status}', this)">✓</button>
+              onclick="plannerToggleDone('${t.id}', '${t.sourceKind}', '${t.status}', this)">✓</button>
     </div>`;
+}
+
+// ── Planner row dispatchers ───────────────────────────
+// Branch on sourceKind to hit the right API for each task type.
+
+async function plannerToggleDone(id, sourceKind, currentStatus, btnEl) {
+  const next = currentStatus === 'done' ? 'todo' : 'done';
+  const card = btnEl?.closest('.planner-row');
+  if (card) card.classList.add('me-card-fading');
+  try {
+    if (sourceKind === 'special') {
+      await api('updateSpecialTask', { id, status: next });
+    } else {
+      await api('markWeeklyTaskDone', { id, status: next });
+    }
+    await loadWeek(weekKey(currentWeekStart));
+    renderPlannerTab();
+  } catch (e) {
+    if (card) card.classList.remove('me-card-fading');
+    alert(`Couldn't update: ${e.message}`);
+  }
+}
+
+async function plannerReassign(id, sourceKind, value) {
+  try {
+    if (sourceKind === 'special') {
+      await api('updateSpecialTask', { id, staffId: value || null });
+    } else {
+      await api('assignWeeklyTask', { id, assignee: value || null });
+    }
+    await loadWeek(weekKey(currentWeekStart));
+    renderPlannerTab();
+  } catch (e) { alert(`Couldn't reassign: ${e.message}`); }
+}
+
+async function plannerChangeDate(id, sourceKind, newDate) {
+  try {
+    if (sourceKind === 'special') {
+      await api('updateSpecialTask', { id, deadline: newDate || null });
+    } else if (newDate) {
+      await api('setWeeklyTaskDueDate', { id, dueDate: newDate });
+    } else {
+      return;        // weekly_tasks must have a date; ignore clear attempts
+    }
+    await loadWeek(weekKey(currentWeekStart));
+    renderPlannerTab();
+  } catch (e) { alert(`Couldn't move: ${e.message}`); }
 }
 
 async function assignPlannerTask(id, assignee) {
@@ -1274,11 +1365,22 @@ function renderCalendarTab() {
   const offset     = dow === 0 ? -6 : 1 - dow;
   const gridStart  = new Date(monthStart); gridStart.setUTCDate(gridStart.getUTCDate() + offset);
 
-  // Group tasks by due_date for fast lookup
+  // Group tasks by due_date for fast lookup. Includes both auto-generated
+  // weekly_tasks (calendarTasks, fetched from /api/calendar) and global
+  // special_tasks (db.specialTasks, already in memory) on their deadlines.
   const byDay = new Map();
   for (const t of calendarTasks || []) {
     if (!byDay.has(t.dueDate)) byDay.set(t.dueDate, []);
     byDay.get(t.dueDate).push(t);
+  }
+  for (const s of (db.specialTasks || [])) {
+    if (!s.deadline) continue;
+    if (!byDay.has(s.deadline)) byDay.set(s.deadline, []);
+    byDay.get(s.deadline).push({
+      id: s.id, dueDate: s.deadline, title: s.title, assignee: s.staffId,
+      status: s.status, sourceKind: 'special', notes: s.scope || null,
+      classType: null, classDate: null, batchKey: null, phase: null,
+    });
   }
 
   // ── Toolbar ──
@@ -1374,14 +1476,16 @@ function renderCalendarDayPanel(iso, tasks) {
     const classLabel = t.classType
       ? ` · ${t.classType}${t.classDate ? ' · ' + fmtShortDate(t.classDate) : ''}`
       : '';
+    const sourceTag = t.sourceKind === 'special'
+      ? `<span class="me-card-source special">Special</span>` : '';
     return `
       <div class="cal-day-row ${isDone ? 'is-done' : ''}">
-        <div class="cal-day-row-title">${t.title}${classLabel}</div>
-        <input type="date" class="task-date-input" value="${t.dueDate || ''}" title="Move to a different day" onchange="changeTaskDueDate('${t.id}', this.value)">
+        ${sourceTag}<div class="cal-day-row-title">${t.title}${classLabel}</div>
+        <input type="date" class="task-date-input" value="${t.dueDate || ''}" title="Move to a different day" onchange="calendarChangeDate('${t.id}', '${t.sourceKind || 'task'}', this.value)">
         <span class="me-card-status ${t.status}">${STATUS_LABELS[t.status] || t.status}</span>
         <span class="cal-day-row-owner" ${ownerStaff ? `style="background:${ownerStaff.color}22;color:${ownerStaff.color}"` : ''}>${ownerLabel}</span>
         <button class="me-card-done ${isDone ? 'is-done' : ''}" title="${isDone ? 'Un-mark done' : 'Mark done'}"
-                onclick="toggleCalendarTaskDone('${t.id}', '${t.status}', this)">✓</button>
+                onclick="toggleCalendarTaskDone('${t.id}', '${t.sourceKind || 'task'}', '${t.status}', this)">✓</button>
       </div>`;
   }).join('');
   document.getElementById('calendar-day-tasks').innerHTML = `
@@ -1415,17 +1519,40 @@ function goToCalendarToday() {
   renderCalendarTabAsync();
 }
 
-async function toggleCalendarTaskDone(id, currentStatus, btnEl) {
+async function toggleCalendarTaskDone(id, sourceKind, currentStatus, btnEl) {
   const nextStatus = currentStatus === 'done' ? 'todo' : 'done';
   try {
-    await api('markWeeklyTaskDone', { id, status: nextStatus });
-    // Update the cached tasks in place so we don't refetch the whole month.
-    if (calendarTasks) {
-      const t = calendarTasks.find(x => x.id === id);
-      if (t) t.status = nextStatus;
+    if (sourceKind === 'special') {
+      await api('updateSpecialTask', { id, status: nextStatus });
+      // Reload the week so db.specialTasks reflects the new status.
+      await loadWeek(weekKey(currentWeekStart));
+    } else {
+      await api('markWeeklyTaskDone', { id, status: nextStatus });
+      if (calendarTasks) {
+        const t = calendarTasks.find(x => x.id === id);
+        if (t) t.status = nextStatus;
+      }
     }
     renderCalendarTab();
   } catch (e) { alert(`Couldn't update: ${e.message}`); }
+}
+
+async function calendarChangeDate(id, sourceKind, newDate) {
+  try {
+    if (sourceKind === 'special') {
+      await api('updateSpecialTask', { id, deadline: newDate || null });
+      await loadWeek(weekKey(currentWeekStart));
+    } else if (newDate) {
+      await api('setWeeklyTaskDueDate', { id, dueDate: newDate });
+      calendarLoadedKey = null;
+      await renderCalendarTabAsync();
+      return;
+    } else {
+      return;
+    }
+    calendarLoadedKey = null;
+    await renderCalendarTabAsync();
+  } catch (e) { alert(`Couldn't move: ${e.message}`); }
 }
 
 // ── GOALS TAB ──────────────────────────────────
@@ -2068,12 +2195,13 @@ function buildClassCard(c) {
 // ── SPECIAL TASKS TAB ──────────────────────────
 
 function renderSpecialTab() {
-  const key = weekKey(currentWeekStart);
-  const week = getWeek(key);
+  // Special tasks are global. Show every staff member's open + recently
+  // completed tasks regardless of which week the user is viewing.
+  const allTasks = db.specialTasks || [];
 
   document.getElementById('special-grid').innerHTML = STAFF.filter(s => s.id !== 'shared').map(staff => {
-    const tasks = week.specialTasks.filter(t => t.staffId === staff.id);
-    const canAdd = tasks.length < 3;
+    const tasks = allTasks.filter(t => t.staffId === staff.id);
+    const canAdd = tasks.filter(t => t.status !== 'done').length < 3;
     const cards = tasks.map(t => buildSpecialCard(t)).join('');
 
     return `<div class="staff-card">
@@ -2402,8 +2530,7 @@ function openAddSpecialModal(staffId) {
 }
 
 function openEditSpecialModal(id) {
-  const week = getWeek(weekKey(currentWeekStart));
-  const task = week.specialTasks.find(t => t.id === id);
+  const task = (db.specialTasks || []).find(t => t.id === id);
   if (!task) return;
   modalState = { type:'editSpecial', id };
   openModal(buildSpecialForm(task));
@@ -2432,7 +2559,6 @@ function buildSpecialForm(t={}) {
 
 async function saveSpecialTask() {
   const key = weekKey(currentWeekStart);
-  const week = getWeek(key);
   const snap = modalState;
   const payload = {
     title:    document.getElementById('st-title').value,
@@ -2445,24 +2571,25 @@ async function saveSpecialTask() {
   try {
     if (snap.type === 'editSpecial') {
       const updated = await api('updateSpecialTask', { id: snap.id, ...payload });
-      const i = week.specialTasks.findIndex(t => t.id === snap.id);
-      if (i >= 0) week.specialTasks[i] = { ...week.specialTasks[i], ...updated };
+      const i = db.specialTasks.findIndex(t => t.id === snap.id);
+      if (i >= 0) db.specialTasks[i] = { ...db.specialTasks[i], ...updated };
     } else {
+      // week_key on the special_task row is just metadata for "when was
+      // this opened"; the row is global and fetched everywhere.
       const created = await api('addSpecialTask', { weekKey: key, staffId: snap.staffId, ...payload });
-      week.specialTasks.push(created);
+      db.specialTasks.push(created);
     }
-    renderSpecialTab();
-  } catch (e) { await loadWeek(key); renderSpecialTab(); }
+    renderAll();
+  } catch (e) { await loadWeek(key); renderAll(); }
 }
 
 async function deleteSpecialTask(id) {
   if (!confirm('Remove this task?')) return;
   const key = weekKey(currentWeekStart);
-  const week = getWeek(key);
-  week.specialTasks = week.specialTasks.filter(t => t.id !== id);
-  renderSpecialTab();
+  db.specialTasks = (db.specialTasks || []).filter(t => t.id !== id);
+  renderAll();
   try { await api('deleteSpecialTask', { id }); }
-  catch (e) { await loadWeek(key); renderSpecialTab(); }
+  catch (e) { await loadWeek(key); renderAll(); }
 }
 
 function openUpdateModal(id) {
@@ -2489,8 +2616,7 @@ function openUpdateModal(id) {
 
 async function saveUpdate() {
   const key = weekKey(currentWeekStart);
-  const week = getWeek(key);
-  const task = week.specialTasks.find(t => t.id === modalState.id);
+  const task = (db.specialTasks || []).find(t => t.id === modalState.id);
   if (!task) { closeModal(); return; }
   const text = document.getElementById('upd-text').value.trim();
   const newStatus = document.getElementById('upd-status').value;
@@ -2506,8 +2632,8 @@ async function saveUpdate() {
       await api('updateSpecialTask', { id: task.id, status: newStatus });
       task.status = newStatus;
     }
-    renderSpecialTab();
-  } catch (e) { await loadWeek(key); renderSpecialTab(); }
+    renderAll();
+  } catch (e) { await loadWeek(key); renderAll(); }
 }
 
 // ════════════════════════════════════════════════

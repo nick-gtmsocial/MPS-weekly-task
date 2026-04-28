@@ -36,7 +36,10 @@ async function handleGet(req, res) {
 
   const [assignmentRows, specialRows, classRows, goalTaskRows, weeklyTaskRows] = await Promise.all([
     sbGet(`week_assignments?week_key=eq.${weekKey}&select=task_id,day_idx,assignees,status,note`),
-    sbGet(`special_tasks?week_key=eq.${weekKey}&select=id,staff_id,title,scope,deadline,status,created_at,special_task_updates(id,update_date,text,created_at)&order=created_at.asc`),
+    // Special tasks are NOT week-scoped — they're multi-week and must
+    // persist across navigation. Return everything; the UI filters as
+    // needed (Special Tasks tab, My Week, Planner, Calendar).
+    sbGet(`special_tasks?select=id,staff_id,title,scope,deadline,status,week_key,created_at,special_task_updates(id,update_date,text,created_at)&order=deadline.asc.nullslast`),
     sbGet(`classes?week_key=eq.${weekKey}&select=id,class_num,type,class_date,instructor,kilnfire_link,kilnfire_external_id,notes,created_at,pieces(id,student,description,stage,notes,stage_history,created_at)&order=created_at.asc`),
     // Goal tasks whose deadline is in this week, OR that are still open and
     // were due before this week (to surface overdue items regardless of
