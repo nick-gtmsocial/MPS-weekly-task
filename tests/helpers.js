@@ -29,19 +29,34 @@ export async function fetchWeek(weekKey = TEST_WEEK_KEY) {
   return res.json();
 }
 
+// Marker that test fixtures put in titles so cleanup only deletes its
+// own data. Any task without this marker is real user data — DO NOT
+// delete it from a test run.
+export const TEST_TASK_MARK = '[TEST]';
+
 export async function wipeTestWeek() {
   const bundle = await fetchWeek();
 
-  // Clear every cell assignment
+  // Clear every cell assignment in the test week. (week_assignments has
+  // no FK to user data outside the week_key scope, so this is safe.)
   for (const [taskId, days] of Object.entries(bundle.assignments || {})) {
     for (const dayIdx of Object.keys(days)) {
       await api('clearAssignment', { weekKey: TEST_WEEK_KEY, taskId, dayIdx: Number(dayIdx) });
     }
   }
 
-  // Cascade-delete classes removes their pieces automatically.
-  for (const c of bundle.classes || [])       await api('deleteClass',       { id: c.id });
-  for (const t of bundle.specialTasks || [])  await api('deleteSpecialTask', { id: t.id });
+  // Classes scoped to the test week were created by tests — safe to
+  // delete (cascades pieces). Real classes are scoped to real weeks
+  // (e.g. 2026-04-X), so the test week (2099-01-05) won't have them.
+  for (const c of bundle.classes || []) await api('deleteClass', { id: c.id });
+
+  // Special tasks are GLOBAL (not week-scoped). Only delete those
+  // explicitly marked as test data — never touch real user tasks.
+  for (const t of bundle.specialTasks || []) {
+    if (t.title?.includes(TEST_TASK_MARK) || t.title?.includes(TEST_GOAL_MARK)) {
+      await api('deleteSpecialTask', { id: t.id });
+    }
+  }
 }
 
 export async function goalsApiRaw(op, payload = {}) {
