@@ -30,23 +30,43 @@ import requests
 
 # ── Configuration ───────────────────────────────────────────────
 
-# Substring (lowercased) → our class_type id. Order matters: longer keys win.
+# Substring (lowercased) → our class_type id. Order matters: most-specific
+# patterns first so e.g. "matcha bowl" beats "handbuilding" on a row that
+# contains both.
 TEMPLATE_PATTERNS = [
-    ("matcha set",   "matcha-set"),
-    ("matcha bowl",  "matcha-bowl"),
-    ("clay date",    "clay-date"),
-    ("mug workshop", "mug"),
-    ("mug",          "mug"),
-    ("taster",       "taster"),
+    ("matcha set",      "matcha-set"),
+    ("matcha bowl",     "matcha-bowl"),
+    ("clay date",       "clay-date"),
+    ("mug workshop",    "mug"),
+    ("decorate a mug",  "mug"),
+    ("mug",             "mug"),
+    ("taster",          "taster"),
+    ("crash course",    "crash-2wk"),
+    ("foundations",     "foundations-3wk"),
+    ("4-week",          "course-4wk"),
+    ("4 week",          "course-4wk"),
+    ("4-week mini",     "course-4wk"),
+    ("festive",         "festive-house"),
+    ("holiday village", "festive-house"),
+    ("tealight",        "festive-house"),
+    ("open studio",     "open-studio"),
+    ("project-based",   "handbuilding-project"),
+    ("handbuilding",    "handbuilding-project"),     # generic catch-all for any other handbuilt class
 ]
 
 # Names we use for `classes.type` — must match the seed in seed-class-types.js
 TYPE_NAMES = {
-    "taster":      "Taster Class",
-    "matcha-bowl": "Matcha Bowl",
-    "matcha-set":  "Matcha Set (2-week course)",
-    "mug":         "Mug Workshop",
-    "clay-date":   "Clay Date for Two",
+    "taster":               "Taster Class",
+    "matcha-bowl":          "Matcha Bowl",
+    "matcha-set":           "Matcha Set (2-week course)",
+    "mug":                  "Mug Workshop",
+    "clay-date":            "Clay Date for Two",
+    "open-studio":          "Open Studio",
+    "handbuilding-project": "Project-based Handbuilding",
+    "festive-house":        "Festive House",
+    "crash-2wk":            "2-week Crash Course",
+    "foundations-3wk":      "3-week Pottery Foundations",
+    "course-4wk":           "4-Week Mini Pottery Course",
 }
 
 

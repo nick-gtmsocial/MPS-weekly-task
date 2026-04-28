@@ -102,6 +102,119 @@ const classTypes = [
   },
 
   // ────────────────────────────────────────────────────────────
+  // Open Studio Hours — drop-in members' time. Pieces vary; default
+  // to dunk-glaze workflow (the most common path).
+  // ────────────────────────────────────────────────────────────
+  {
+    id:                'open-studio',
+    name:              'Open Studio',
+    piecesPerStudent:  1,
+    glazeMethod:       'dunk',
+    pickupWindowDays:  28,
+    notes:             'Drop-in studio time. Default 1 piece/attendee with dunk-glaze workflow; staff can split/edit pieces after the session if needed.',
+    tasks: [
+      { phase: 'bisque',     title: 'Bisque fire',           offsetDays:  6, durationMinutes: 30, defaultOwner: 'miso',   batchable: true },
+      { phase: 'glaze',      title: 'Dip glaze (clear)',     offsetDays:  9, durationMinutes: 30, defaultOwner: 'shared', batchable: true },
+      { phase: 'glaze-fire', title: 'Glaze fire',            offsetDays: 12, durationMinutes: 30, defaultOwner: 'miso',   batchable: true },
+      { phase: 'finish',     title: 'Mark ready for pickup', offsetDays: 15, durationMinutes: 20, defaultOwner: 'shared' },
+    ],
+  },
+
+  // ────────────────────────────────────────────────────────────
+  // Project-based Handbuilding for Beginners — generic handbuilding workshop
+  // ────────────────────────────────────────────────────────────
+  {
+    id:                'handbuilding-project',
+    name:              'Project-based Handbuilding',
+    piecesPerStudent:  1,
+    glazeMethod:       'dunk',
+    pickupWindowDays:  28,
+    notes:             'Generic handbuilding workshop. Same processing pipeline as Mug Workshop / Matcha Bowl.',
+    tasks: [
+      { phase: 'bisque',     title: 'Bisque fire',           offsetDays:  6, durationMinutes: 30, defaultOwner: 'miso',   batchable: true },
+      { phase: 'glaze',      title: 'Dip glaze (clear)',     offsetDays:  9, durationMinutes: 45, defaultOwner: 'shared', batchable: true },
+      { phase: 'glaze-fire', title: 'Glaze fire',            offsetDays: 12, durationMinutes: 30, defaultOwner: 'miso',   batchable: true },
+      { phase: 'finish',     title: 'Mark ready for pickup', offsetDays: 15, durationMinutes: 30, defaultOwner: 'shared' },
+    ],
+  },
+
+  // ────────────────────────────────────────────────────────────
+  // Festive House / Holiday Village — seasonal handbuilding (decorative)
+  // Hand-painted underglaze — needs more detail work than a dunk glaze.
+  // ────────────────────────────────────────────────────────────
+  {
+    id:                'festive-house',
+    name:              'Festive House',
+    piecesPerStudent:  1,
+    glazeMethod:       'hand-paint',
+    pickupWindowDays:  28,
+    notes:             'Seasonal handbuilding (Christmas village, Diwali tealights, etc.). Hand-painted underglaze for decorative detail.',
+    tasks: [
+      { phase: 'bisque',     title: 'Bisque fire',                offsetDays:  6, durationMinutes:  30, defaultOwner: 'miso',   batchable: true },
+      { phase: 'glaze',      title: 'Hand-paint underglaze',      offsetDays: 10, durationMinutes: 120, defaultOwner: 'shared' },
+      { phase: 'glaze-fire', title: 'Glaze fire',                 offsetDays: 13, durationMinutes:  30, defaultOwner: 'miso',   batchable: true },
+      { phase: 'finish',     title: 'Mark ready for pickup',      offsetDays: 16, durationMinutes:  30, defaultOwner: 'shared' },
+    ],
+  },
+
+  // ────────────────────────────────────────────────────────────
+  // 2-week Crash Course — wheel-thrown, condensed
+  // ────────────────────────────────────────────────────────────
+  {
+    id:                'crash-2wk',
+    name:              '2-week Crash Course',
+    piecesPerStudent:  2,
+    glazeMethod:       'hand-paint',
+    pickupWindowDays:  28,
+    notes:             'Condensed wheel-throwing intro. Anchor = Week 1 class. Bisque happens between W1 and W2 (or after W2 depending on cohort).',
+    tasks: [
+      { phase: 'process',    title: 'Trim pieces',                offsetDays:  3, durationMinutes:  60, defaultOwner: 'shared', batchable: true },
+      { phase: 'bisque',     title: 'Bisque fire',                offsetDays:  6, durationMinutes:  30, defaultOwner: 'miso',   batchable: true },
+      { phase: 'class',      title: 'Week 2 class — students glaze + finish pieces', offsetDays: 7, durationMinutes: 150, defaultOwner: null },
+      { phase: 'glaze-fire', title: 'Glaze fire (after Week 2)',  offsetDays:  9, durationMinutes:  30, defaultOwner: 'miso',   batchable: true },
+      { phase: 'finish',     title: 'Mark ready for pickup',      offsetDays: 14, durationMinutes:  30, defaultOwner: 'shared' },
+    ],
+  },
+
+  // ────────────────────────────────────────────────────────────
+  // 3-week Pottery Foundations — wheel-thrown, multi-week course
+  // ────────────────────────────────────────────────────────────
+  {
+    id:                'foundations-3wk',
+    name:              '3-week Pottery Foundations',
+    piecesPerStudent:  3,
+    glazeMethod:       'hand-paint',
+    pickupWindowDays:  28,
+    notes:             'Anchor = Week 1 class. Bisque fires after W2; glaze in W3; final fire after W3.',
+    tasks: [
+      { phase: 'process',    title: 'Trim Week 1 pieces',         offsetDays:  3, durationMinutes:  60, defaultOwner: 'shared', batchable: true },
+      { phase: 'bisque',     title: 'Bisque fire (between W2 and W3)', offsetDays: 12, durationMinutes: 30, defaultOwner: 'miso', batchable: true },
+      { phase: 'class',      title: 'Week 3 class — students glaze pieces', offsetDays: 14, durationMinutes: 150, defaultOwner: null },
+      { phase: 'glaze-fire', title: 'Glaze fire (after Week 3)',  offsetDays: 16, durationMinutes:  30, defaultOwner: 'miso',   batchable: true },
+      { phase: 'finish',     title: 'Mark ready for pickup',      offsetDays: 21, durationMinutes:  30, defaultOwner: 'shared' },
+    ],
+  },
+
+  // ────────────────────────────────────────────────────────────
+  // 4-Week Mini Pottery Course — longer, more pieces
+  // ────────────────────────────────────────────────────────────
+  {
+    id:                'course-4wk',
+    name:              '4-Week Mini Pottery Course',
+    piecesPerStudent:  4,
+    glazeMethod:       'hand-paint',
+    pickupWindowDays:  28,
+    notes:             'Anchor = Week 1 class. Bisque after W3; glaze in W4; final fire after W4.',
+    tasks: [
+      { phase: 'process',    title: 'Trim across the course',     offsetDays:  3, durationMinutes:  90, defaultOwner: 'shared', batchable: true },
+      { phase: 'bisque',     title: 'Bisque fire (between W3 and W4)', offsetDays: 19, durationMinutes: 30, defaultOwner: 'miso', batchable: true },
+      { phase: 'class',      title: 'Week 4 class — students glaze pieces', offsetDays: 21, durationMinutes: 150, defaultOwner: null },
+      { phase: 'glaze-fire', title: 'Glaze fire (after Week 4)',  offsetDays: 23, durationMinutes:  30, defaultOwner: 'miso',   batchable: true },
+      { phase: 'finish',     title: 'Mark ready for pickup',      offsetDays: 28, durationMinutes:  30, defaultOwner: 'shared' },
+    ],
+  },
+
+  // ────────────────────────────────────────────────────────────
   // Clay Date for Two — wheel-thrown, hand-paint glaze
   // ────────────────────────────────────────────────────────────
   {
