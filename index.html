@@ -94,6 +94,16 @@ a:hover{text-decoration:underline}
 .task-date-input{font-size:11px;border:1px solid var(--border);border-radius:5px;padding:3px 6px;background:#fff;color:var(--text);cursor:pointer;font-family:inherit}
 .task-date-input:hover{border-color:var(--teal)}
 .task-date-input:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 2px var(--teal-light)}
+/* Compact secondary-affordance variant — used next to a readable date
+   label in My Week so the label stays primary, the picker stays nearby
+   for editing. */
+.task-date-edit{width:24px;padding:2px;background:#F3F4F6;color:transparent;cursor:pointer}
+.task-date-edit::-webkit-calendar-picker-indicator{cursor:pointer;opacity:.5;margin:0}
+.task-date-edit:hover{background:var(--teal-light)}
+.task-date-edit:hover::-webkit-calendar-picker-indicator{opacity:1}
+
+.st-deadline{background:var(--teal-light);color:var(--teal-dark);padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600}
+.st-no-deadline{color:var(--muted);font-size:11px;font-style:italic}
 .planner-row:last-child{border-bottom:none}
 .planner-row.is-done{opacity:.55}
 .planner-row.is-done .planner-row-title{text-decoration:line-through;color:var(--muted)}
@@ -969,11 +979,15 @@ function renderMyWeekTab() {
       ? `<button class="me-card-done ${isDone ? 'is-done' : ''}" title="${isDone ? 'Un-mark done' : 'Mark done'}" onclick="event.stopPropagation(); toggleWeeklyTaskDone('${item.doneId}', '${item.status}', this)">✓</button>`
       : '';
     const batchPill = item.batched ? `<span class="me-card-batch">batch</span>` : '';
-    // Auto-generated weekly_tasks (item.doneId set) get an editable date
-    // input. Goal/special items render the static dayLabel and rely on
-    // their card-click → edit modal to change deadlines.
+    // Always show a readable due-date label. For auto-generated tasks
+    // (item.doneId set), pair the label with a small date-input button
+    // so the user can move the task without losing context.
+    const friendlyDate = item.dateIso
+      ? `Due ${fmtShortDate(item.dateIso)}`
+      : (item.dayLabel || (item.doneId ? 'No date' : ''));
     const dateField = item.doneId
-      ? `<input type="date" class="task-date-input" value="${item.dateIso || ''}" title="Move to a different day" onclick="event.stopPropagation()" onchange="event.stopPropagation(); changeTaskDueDate('${item.doneId}', this.value)">`
+      ? `<span class="me-card-day">${friendlyDate}</span>
+         <input type="date" class="task-date-input task-date-edit" value="${item.dateIso || ''}" title="Move to a different day" onclick="event.stopPropagation()" onchange="event.stopPropagation(); changeTaskDueDate('${item.doneId}', this.value)">`
       : (item.dayLabel ? `<span class="me-card-day">${item.dayLabel}</span>` : '');
     return `<div class="me-card ${cls} ${isDone ? 'is-done' : ''}" ${cardOnClick}>
       <span class="me-card-source ${item.source}">${sourceLabel(item.source)}</span>
@@ -2228,7 +2242,7 @@ function buildSpecialCard(task) {
     <div class="st-title">${task.title}</div>
     ${task.scope ? `<div class="st-scope">${task.scope}</div>` : ''}
     <div class="st-meta">
-      ${task.deadline ? `<span>Due: ${task.deadline}</span>` : ''}
+      ${task.deadline ? `<span class="st-deadline">Due ${fmtLongDate(task.deadline)}</span>` : '<span class="st-no-deadline">No deadline set</span>'}
       <span class="status-tag status-${status}">${STATUS_LABELS[status]||status}</span>
     </div>
     ${updates ? `<div class="st-updates">${updates}</div>` : ''}
