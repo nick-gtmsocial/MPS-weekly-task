@@ -26,18 +26,23 @@ async function handleGet(req, res) {
   const { id } = req.query;
 
   if (id) {
-    const [goal] = await sbGet(`goals?id=eq.${id}&select=*,goal_tasks(*)`);
+    const [goal] = await sbGet(`goals?id=eq.${id}&deleted_at=is.null&select=*,goal_tasks(*)`);
     if (!goal) return res.status(404).json({ error: 'Goal not found' });
+    const liveTasks = (goal.goal_tasks || []).filter(t => !t.deleted_at);
     return res.status(200).json({
       goal:  shapeGoal(goal),
-      tasks: (goal.goal_tasks || []).map(shapeGoalTask).sort(compareTasks),
+      tasks: liveTasks.map(shapeGoalTask).sort(compareTasks),
     });
   }
 
   const [goals, templates] = await Promise.all([
-    sbGet('goals?select=*,goal_tasks(id,status,deadline)&order=target_date.asc'),
+    sbGet('goals?deleted_at=is.null&select=*,goal_tasks(id,status,deadline,deleted_at)&order=target_date.asc'),
     sbGet('templates?select=id,name,description,sections&order=name.asc'),
   ]);
+  // Strip soft-deleted child rows client-side.
+  for (const g of goals) {
+    if (g.goal_tasks) g.goal_tasks = g.goal_tasks.filter(t => !t.deleted_at);
+  }
 
   // Shape each goal with its own task counts first, then roll child counts up
   // into their parents so the tree's progress bars include sub-goal work.
@@ -123,7 +128,17 @@ const OPS = {
 
   async deleteGoal({ id }) {
     requireFields({ id });
-    await sbDelete(`goals?id=eq.${id}`);
+    const now = new Date().toISOString();
+    // Soft-delete cascade: hide the goal and its tasks together.
+    await sbPatch(`goals?id=eq.${id}`,            { deleted_at: now });
+    await sbPatch(`goal_tasks?goal_id=eq.${id}`,  { deleted_at: now });
+    return { ok: true };
+  },
+
+  async restoreGoal({ id }) {
+    requireFields({ id });
+    await sbPatch(`goals?id=eq.${id}`,            { deleted_at: null });
+    await sbPatch(`goal_tasks?goal_id=eq.${id}`,  { deleted_at: null });
     return { ok: true };
   },
 
@@ -161,7 +176,7 @@ const OPS = {
 
   async deleteGoalTask({ id }) {
     requireFields({ id });
-    await sbDelete(`goal_tasks?id=eq.${id}`);
+    await sbPatch(`goal_tasks?id=eq.${id}`, { deleted_at: new Date().toISOString() });
     return { ok: true };
   },
 

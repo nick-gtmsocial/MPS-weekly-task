@@ -344,6 +344,103 @@ a:hover{text-decoration:underline}
 .staff-check input:not(:checked)+.check-chip{opacity:.35}
 .staff-check input:checked+.check-chip{opacity:1;transform:scale(1.1)}
 .modal-actions{padding:16px 20px 20px;display:flex;gap:8px;justify-content:flex-end;border-top:1px solid var(--border);margin-top:16px}
+
+/* ─────────────────────────────────────────────────────────────
+   MOBILE — narrow-screen overrides for phone-friendly rendering.
+   Triggered at <=720px (covers all common phone widths in landscape
+   too). Goal: bigger tap targets, stacked rows, scrollable tab nav,
+   full-screen modals.
+   ───────────────────────────────────────────────────────────── */
+@media (max-width: 720px) {
+  body { font-size: 15px; line-height: 1.5; }
+
+  /* HEADER — stack into rows so brand, week-nav, and actions don't squish. */
+  .header { flex-wrap: wrap; padding: 10px 12px; gap: 10px; row-gap: 10px; }
+  .header-brand { flex: 1 1 60%; font-size: 16px; }
+  .header-brand small { display: none; }            /* save space */
+  .week-nav { flex: 1 1 100%; justify-content: center; gap: 8px; order: 2; }
+  #week-label { font-size: 14px; min-width: auto; }
+  .header-actions { flex: 1 1 100%; flex-wrap: wrap; justify-content: flex-start; gap: 8px; order: 3; }
+  .user-selector { flex: 1 1 auto; }
+  .user-selector select { font-size: 14px; }
+
+  /* LEGEND — wrap chips, smaller font. */
+  .legend-bar { padding: 8px 12px; gap: 8px; }
+  .legend-item { font-size: 12px; }
+
+  /* TABS — horizontal scroll so all 7 fit on a phone, with nice tap targets. */
+  .tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; padding: 0 8px;
+          scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab-btn { white-space: nowrap; padding: 12px 14px; font-size: 14px; }
+
+  .main-content { padding: 14px 12px; }
+  .section-top { flex-direction: column; align-items: flex-start; gap: 10px; }
+  .section-top h2 { font-size: 17px; }
+
+  /* MY WEEK — bigger title, stack metadata under main content. */
+  .me-banner { padding: 12px 14px; }
+  .me-card { flex-wrap: wrap; padding: 14px; gap: 10px; }
+  .me-card-source { font-size: 10px; padding: 3px 8px; }
+  .me-card-main { flex: 1 1 100%; min-width: 0; order: 2; }
+  .me-card-title { font-size: 15px; white-space: normal; }
+  .me-card-notes { white-space: normal; }
+  .me-card-meta { flex: 1 1 100%; order: 3; justify-content: space-between; gap: 6px; }
+  .me-card-day { font-size: 12px; }
+  .me-card-status { font-size: 11px; padding: 3px 9px; }
+  .me-card-done { width: 38px; height: 38px; font-size: 17px; }   /* bigger touch */
+
+  /* PLANNER — stack the row into 2 visual lines. */
+  .planner-toolbar { flex-direction: column; align-items: stretch; gap: 10px; }
+  .planner-chip-row { overflow-x: auto; -webkit-overflow-scrolling: touch;
+                      padding-bottom: 4px; scrollbar-width: none; }
+  .planner-chip-row::-webkit-scrollbar { display: none; }
+  .planner-chip { white-space: nowrap; padding: 7px 12px; font-size: 13px; }
+  .planner-toolbar-right { justify-content: space-between; }
+  .planner-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px; }
+  .planner-row-main { flex: 1 1 100%; order: 1; }
+  .planner-row-title { font-size: 14px; white-space: normal; }
+  .planner-row .me-card-source { order: 0; }
+  .planner-row .me-card-batch { order: 2; }
+  .planner-row .task-date-input { order: 3; flex: 1 1 auto; }
+  .planner-row .planner-owner { order: 4; flex: 1 1 auto; min-width: 110px; }
+  .planner-row .me-card-status { order: 5; }
+  .planner-row .me-card-done { order: 6; margin-left: auto; }
+  .planner-day-head { padding: 10px 14px; font-size: 13px; }
+
+  /* CALENDAR — compact cells. Hide owner-dots; the count badge is enough. */
+  .cal-toolbar { flex-direction: column; align-items: stretch; gap: 10px; }
+  .cal-month-label { font-size: 16px; min-width: auto; }
+  .cal-grid-body { grid-auto-rows: minmax(56px, auto); }
+  .cal-cell { padding: 4px 4px; }
+  .cal-cell-num { font-size: 12px; }
+  .cal-cell-count { top: 2px; right: 4px; padding: 0 5px; font-size: 9px; min-width: 14px; }
+  .cal-cell-phases { display: none; }
+  .cal-day-row { grid-template-columns: 1fr auto; gap: 8px; row-gap: 6px; }
+  .cal-day-row-title { grid-column: 1 / -1; }
+
+  /* GOALS tab — looser spacing, full-width children */
+  .goal-card-head { grid-template-columns: 1fr; gap: 8px; padding: 12px 14px; }
+  .goal-progress { width: 100%; }
+  .goal-task-row { grid-template-columns: 1fr; row-gap: 4px; padding: 10px 12px; }
+
+  /* SPECIAL TASKS — wrap cards full-width */
+  .staff-grid { grid-template-columns: 1fr !important; }
+
+  /* MODALS — fill the screen so on-screen keyboards don't crowd them. */
+  .modal-overlay { padding: 0; }
+  .modal-box { max-width: 100%; max-height: 95vh; border-radius: 12px 12px 0 0;
+               margin-top: auto; margin-bottom: 0; align-self: flex-end; width: 100%; }
+  .modal-overlay { align-items: flex-end !important; }
+  .modal-body { padding: 14px 16px; max-height: 70vh; overflow-y: auto; }
+  .modal-actions { padding: 12px 16px; flex-wrap: wrap; }
+  .form-field input,
+  .form-field select,
+  .form-field textarea { font-size: 16px; }    /* prevents iOS zoom on focus */
+
+  /* TASK TABLE (legacy Weekly Tasks tab) — give it horizontal scroll */
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+}
 </style>
 </head>
 <body>

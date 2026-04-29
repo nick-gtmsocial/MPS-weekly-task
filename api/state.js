@@ -36,19 +36,20 @@ async function handleGet(req, res) {
 
   const [assignmentRows, specialRows, classRows, goalTaskRows, weeklyTaskRows] = await Promise.all([
     sbGet(`week_assignments?week_key=eq.${weekKey}&select=task_id,day_idx,assignees,status,note`),
-    // Special tasks are NOT week-scoped — they're multi-week and must
-    // persist across navigation. Return everything; the UI filters as
-    // needed (Special Tasks tab, My Week, Planner, Calendar).
-    sbGet(`special_tasks?select=id,staff_id,title,scope,deadline,status,week_key,created_at,special_task_updates(id,update_date,text,created_at)&order=deadline.asc.nullslast`),
-    sbGet(`classes?week_key=eq.${weekKey}&select=id,class_num,type,class_date,instructor,kilnfire_link,kilnfire_external_id,notes,created_at,pieces(id,student,description,stage,notes,stage_history,created_at)&order=created_at.asc`),
-    // Goal tasks whose deadline is in this week, OR that are still open and
-    // were due before this week (to surface overdue items regardless of
-    // which week you're viewing).
-    sbGet(`goal_tasks?deadline=lte.${weekEnd}&or=(deadline.gte.${weekKey},status.neq.done)&select=id,goal_id,section,subsection,title,owner,deadline,status,notes,goals(id,title,target_date)&order=deadline.asc.nullslast`),
-    // Auto-generated weekly tasks for this week. Embed class context so the
-    // UI can show "Taster · Apr 22" without a separate fetch.
-    sbGet(`weekly_tasks?week_key=eq.${weekKey}&select=*,classes(type,class_date),pieces(student)&order=due_date.asc,batch_key.asc.nullsfirst`),
+    // Special tasks are NOT week-scoped — multi-week, persistent. Filter
+    // out soft-deleted rows here.
+    sbGet(`special_tasks?deleted_at=is.null&select=id,staff_id,title,scope,deadline,status,week_key,created_at,special_task_updates(id,update_date,text,created_at)&order=deadline.asc.nullslast`),
+    // Pieces are filtered to live ones via the embedded resource filter.
+    sbGet(`classes?week_key=eq.${weekKey}&deleted_at=is.null&select=id,class_num,type,class_date,instructor,kilnfire_link,kilnfire_external_id,notes,created_at,pieces(id,student,description,stage,notes,stage_history,created_at,deleted_at)&order=created_at.asc`),
+    sbGet(`goal_tasks?deleted_at=is.null&deadline=lte.${weekEnd}&or=(deadline.gte.${weekKey},status.neq.done)&select=id,goal_id,section,subsection,title,owner,deadline,status,notes,goals(id,title,target_date)&order=deadline.asc.nullslast`),
+    sbGet(`weekly_tasks?week_key=eq.${weekKey}&deleted_at=is.null&select=*,classes(type,class_date),pieces(student)&order=due_date.asc,batch_key.asc.nullsfirst`),
   ]);
+
+  // PostgREST doesn't filter embedded resources without an !inner hint,
+  // so strip soft-deleted pieces client-side. Cheap, robust.
+  for (const c of classRows) {
+    if (c.pieces) c.pieces = c.pieces.filter(p => !p.deleted_at);
+  }
 
   return res.status(200).json({
     weekKey,
@@ -211,8 +212,16 @@ const OPS = {
 
   async deleteSpecialTask({ id }) {
     requireFields({ id });
-    await sbDelete(`special_tasks?id=eq.${id}`);
+    // Soft delete — recoverable via restoreSpecialTask. Rows stay in the
+    // table; queries filter on deleted_at IS NULL.
+    await sbPatch(`special_tasks?id=eq.${id}`, { deleted_at: new Date().toISOString() });
     return { ok: true };
+  },
+
+  async restoreSpecialTask({ id }) {
+    requireFields({ id });
+    const [row] = await sbPatch(`special_tasks?id=eq.${id}`, { deleted_at: null });
+    return shapeSpecialTask({ ...row, special_task_updates: [] });
   },
 
   async addSpecialTaskUpdate({ specialTaskId, text, date }) {
@@ -266,7 +275,21 @@ const OPS = {
 
   async deleteClass({ id }) {
     requireFields({ id });
-    await sbDelete(`classes?id=eq.${id}`);
+    const now = new Date().toISOString();
+    // Soft-delete cascade: hide the class plus its pieces and any
+    // generated weekly_tasks referencing it. Recovery via restoreClass
+    // unhides the same set.
+    await sbPatch(`classes?id=eq.${id}`,                  { deleted_at: now });
+    await sbPatch(`pieces?class_id=eq.${id}`,             { deleted_at: now });
+    await sbPatch(`weekly_tasks?class_id=eq.${id}`,       { deleted_at: now });
+    return { ok: true };
+  },
+
+  async restoreClass({ id }) {
+    requireFields({ id });
+    await sbPatch(`classes?id=eq.${id}`,                  { deleted_at: null });
+    await sbPatch(`pieces?class_id=eq.${id}`,             { deleted_at: null });
+    await sbPatch(`weekly_tasks?class_id=eq.${id}`,       { deleted_at: null });
     return { ok: true };
   },
 
@@ -317,7 +340,9 @@ const OPS = {
 
   async deletePiece({ id }) {
     requireFields({ id });
-    await sbDelete(`pieces?id=eq.${id}`);
+    const now = new Date().toISOString();
+    await sbPatch(`pieces?id=eq.${id}`,                   { deleted_at: now });
+    await sbPatch(`weekly_tasks?piece_id=eq.${id}`,       { deleted_at: now });
     return { ok: true };
   },
 
@@ -397,7 +422,7 @@ const OPS = {
 
   async deleteWeeklyTask({ id }) {
     requireFields({ id });
-    await sbDelete(`weekly_tasks?id=eq.${id}`);
+    await sbPatch(`weekly_tasks?id=eq.${id}`, { deleted_at: new Date().toISOString() });
     return { ok: true };
   },
 };

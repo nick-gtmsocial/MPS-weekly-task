@@ -22,7 +22,7 @@ export default async function handler(req, res) {
 
   try {
     const rows = await sbGet(
-      `weekly_tasks?due_date=gte.${from}&due_date=lte.${to}` +
+      `weekly_tasks?due_date=gte.${from}&due_date=lte.${to}&deleted_at=is.null` +
       `&select=id,due_date,title,phase,batch_key,assignee,status,source_kind,class_id,classes(type,class_date)` +
       `&order=due_date.asc,batch_key.asc.nullsfirst`,
     );
