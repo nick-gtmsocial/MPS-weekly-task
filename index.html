@@ -645,6 +645,29 @@ const DAYS = ['MON','TUE','WED','THU','FRI','SAT'];
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const STAGES = ['Greenware','Post-Process','Bisque','Underglaze','Glaze Fire','Done','Issue'];
 
+// ET date helpers must be defined before any top-level state initializer
+// uses them (`currentWeekStart = getMonday(...)` runs at script load).
+// `const` is in the temporal dead zone until its line executes, so leaving
+// these below the state block crashed the page on first load.
+const ET_DATE_FMT = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'America/Toronto',
+  year: 'numeric', month: '2-digit', day: '2-digit',
+});
+
+function todayInET() { return ET_DATE_FMT.format(new Date()); }
+
+function mondayOfET(isoDate) {
+  const d = new Date(`${isoDate}T12:00:00Z`);
+  const dow = d.getUTCDay();
+  d.setUTCDate(d.getUTCDate() + (dow === 0 ? -6 : 1 - dow));
+  return d.toISOString().slice(0, 10);
+}
+
+function getMonday(date) {
+  const ymd = ET_DATE_FMT.format(date);
+  return new Date(`${mondayOfET(ymd)}T12:00:00Z`);
+}
+
 // ════════════════════════════════════════════════
 // STATE
 // ════════════════════════════════════════════════
@@ -830,27 +853,6 @@ function migrateLegacyLocalStorage() {
 // Date objects representing date-only values are anchored at 12:00 UTC of
 // the target ISO date — that way toISOString().slice(0,10) and the
 // getUTC* accessors all return the intended date regardless of viewer TZ.
-
-const ET_DATE_FMT = new Intl.DateTimeFormat('en-CA', {
-  timeZone: 'America/Toronto',
-  year: 'numeric', month: '2-digit', day: '2-digit',
-});
-
-// Current YYYY-MM-DD in ET.
-function todayInET() { return ET_DATE_FMT.format(new Date()); }
-
-// Monday (YYYY-MM-DD) of the week containing the given ET ISO date.
-function mondayOfET(isoDate) {
-  const d = new Date(`${isoDate}T12:00:00Z`);
-  const dow = d.getUTCDay();
-  d.setUTCDate(d.getUTCDate() + (dow === 0 ? -6 : 1 - dow));
-  return d.toISOString().slice(0, 10);
-}
-
-function getMonday(date) {
-  const ymd = ET_DATE_FMT.format(date);
-  return new Date(`${mondayOfET(ymd)}T12:00:00Z`);
-}
 
 function weekKey(monday) { return monday.toISOString().slice(0,10); }
 
