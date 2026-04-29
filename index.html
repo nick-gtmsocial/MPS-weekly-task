@@ -459,7 +459,6 @@ a:hover{text-decoration:underline}
       <select id="current-user-select" onchange="setCurrentUser(this.value)"></select>
     </div>
     <button class="btn btn-outline btn-sm" onclick="exportJSON()">Export</button>
-    <label class="btn btn-outline btn-sm" style="cursor:pointer">Import<input type="file" accept=".json" onchange="importJSON(event)" hidden></label>
   </div>
 </header>
 
@@ -2779,11 +2778,6 @@ function exportJSON() {
   a.href = URL.createObjectURL(blob);
   a.download = `mps-studio-backup-${new Date().toISOString().slice(0,10)}.json`;
   a.click();
-}
-
-function importJSON(e) {
-  e.target.value = '';
-  alert('Import is disabled in shared-storage mode. To restore a backup, contact Nick — it needs to be loaded into Supabase directly so all devices see it.');
 }
 
 // ════════════════════════════════════════════════
