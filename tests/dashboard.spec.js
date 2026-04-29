@@ -196,10 +196,12 @@ test('special tasks: add a task for Nick, then append an update', async ({ page 
   await expect(taskCard.getByText('Started reviewing')).toBeVisible();
 
   const bundle = await fetchWeek();
-  expect(bundle.specialTasks).toHaveLength(1);
-  expect(bundle.specialTasks[0].title).toMatch(/^Review April schedule/);
-  expect(bundle.specialTasks[0].updates).toHaveLength(1);
-  expect(bundle.specialTasks[0].updates[0].text).toMatch(/Started reviewing/);
+  // specialTasks is global now, so filter to the test fixture only.
+  const mine = bundle.specialTasks.filter(t => t.title.includes('[TEST]'));
+  expect(mine).toHaveLength(1);
+  expect(mine[0].title).toMatch(/^Review April schedule/);
+  expect(mine[0].updates).toHaveLength(1);
+  expect(mine[0].updates[0].text).toMatch(/Started reviewing/);
 });
 
 test('delete class also cascades pieces', async ({ page }) => {
