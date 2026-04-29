@@ -825,12 +825,31 @@ function migrateLegacyLocalStorage() {
 // ════════════════════════════════════════════════
 // DATE UTILITIES
 // ════════════════════════════════════════════════
+// All week/today logic is anchored to America/Toronto (the studio's
+// timezone) so a viewer's local timezone can't shift the week boundary.
+// Date objects representing date-only values are anchored at 12:00 UTC of
+// the target ISO date — that way toISOString().slice(0,10) and the
+// getUTC* accessors all return the intended date regardless of viewer TZ.
+
+const ET_DATE_FMT = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'America/Toronto',
+  year: 'numeric', month: '2-digit', day: '2-digit',
+});
+
+// Current YYYY-MM-DD in ET.
+function todayInET() { return ET_DATE_FMT.format(new Date()); }
+
+// Monday (YYYY-MM-DD) of the week containing the given ET ISO date.
+function mondayOfET(isoDate) {
+  const d = new Date(`${isoDate}T12:00:00Z`);
+  const dow = d.getUTCDay();
+  d.setUTCDate(d.getUTCDate() + (dow === 0 ? -6 : 1 - dow));
+  return d.toISOString().slice(0, 10);
+}
 
 function getMonday(date) {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  return new Date(d.getFullYear(), d.getMonth(), diff);
+  const ymd = ET_DATE_FMT.format(date);
+  return new Date(`${mondayOfET(ymd)}T12:00:00Z`);
 }
 
 function weekKey(monday) { return monday.toISOString().slice(0,10); }
@@ -838,19 +857,19 @@ function weekKey(monday) { return monday.toISOString().slice(0,10); }
 function getWeekDates(monday) {
   return Array.from({length:6}, (_,i) => {
     const d = new Date(monday);
-    d.setDate(d.getDate() + i);
+    d.setUTCDate(d.getUTCDate() + i);
     return d;
   });
 }
 
-function fmtDate(d) { return `${MONTHS[d.getMonth()]} ${d.getDate()}`; }
+function fmtDate(d) { return `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}`; }
 
 function fmtWeekRange(monday) {
   const dates = getWeekDates(monday);
   const s = dates[0], e = dates[5];
-  if (s.getMonth() === e.getMonth())
-    return `${MONTHS[s.getMonth()]} ${s.getDate()}–${e.getDate()}, ${s.getFullYear()}`;
-  return `${fmtDate(s)} – ${fmtDate(e)}, ${s.getFullYear()}`;
+  if (s.getUTCMonth() === e.getUTCMonth())
+    return `${MONTHS[s.getUTCMonth()]} ${s.getUTCDate()}–${e.getUTCDate()}, ${s.getUTCFullYear()}`;
+  return `${fmtDate(s)} – ${fmtDate(e)}, ${s.getUTCFullYear()}`;
 }
 
 // ════════════════════════════════════════════════
@@ -859,7 +878,7 @@ function fmtWeekRange(monday) {
 
 async function changeWeek(dir) {
   const d = new Date(currentWeekStart);
-  d.setDate(d.getDate() + dir * 7);
+  d.setUTCDate(d.getUTCDate() + dir * 7);
   currentWeekStart = d;
   const key = weekKey(currentWeekStart);
   if (!loadedWeeks.has(key)) {
@@ -967,8 +986,8 @@ function renderMyWeekTab() {
   const key           = weekKey(currentWeekStart);
   const week          = getWeek(key);
   const dates         = getWeekDates(currentWeekStart);
-  const todayIso      = new Date().toISOString().slice(0, 10);
-  const thisMondayIso = weekKey(getMonday(new Date()));
+  const todayIso      = todayInET();
+  const thisMondayIso = mondayOfET(todayIso);
   const isCurrentWeek = key === thisMondayIso;
   // When viewing the current week, "overdue" is measured against today's date.
   // When viewing another week, "overdue" means the item was due before the
@@ -992,7 +1011,7 @@ function renderMyWeekTab() {
         notes:    task.notes || cell.note || '',
         status:   cell.status || 'todo',
         dateIso:  date.toISOString().slice(0, 10),
-        dayLabel: `${DAYS[dayIdx]} ${date.getDate()}`,
+        dayLabel: `${DAYS[dayIdx]} ${date.getUTCDate()}`,
         onClick:  `openCellModal('${taskId}', ${dayIdx})`,
       });
     }
@@ -1372,7 +1391,7 @@ async function changeTaskDueDate(id, newDate) {
 // isn't tied to a class or template.
 function openAddManualTaskModal() {
   const key = weekKey(currentWeekStart);
-  const todayIso = new Date().toISOString().slice(0, 10);
+  const todayIso = todayInET();
   // Default due-date: today if today is in the viewed week, else the Monday.
   const inWeek = todayIso >= key && todayIso <= addDaysIso(key, 6);
   const defaultDue = inWeek ? todayIso : key;
@@ -1431,8 +1450,8 @@ async function saveManualTask() {
 // calendarTasks holds the fetched range; calendarSelectedDay drives
 // the day-detail panel below the grid.
 let calendarMonth = (() => {
-  const d = new Date();
-  return { year: d.getFullYear(), month: d.getMonth() };
+  const [y, m] = todayInET().split('-').map(Number);
+  return { year: y, month: m - 1 };
 })();
 let calendarTasks       = null;
 let calendarSelectedDay = null;
@@ -1470,7 +1489,7 @@ async function loadCalendarRange() {
 }
 
 function renderCalendarTab() {
-  const todayIso = new Date().toISOString().slice(0, 10);
+  const todayIso = todayInET();
   const monthStart = new Date(Date.UTC(calendarMonth.year, calendarMonth.month, 1, 12));
   const dow        = monthStart.getUTCDay();
   const offset     = dow === 0 ? -6 : 1 - dow;
@@ -1624,9 +1643,10 @@ function changeCalendarMonth(dir) {
 }
 
 function goToCalendarToday() {
-  const d = new Date();
-  calendarMonth = { year: d.getFullYear(), month: d.getMonth() };
-  calendarSelectedDay = d.toISOString().slice(0, 10);
+  const todayET = todayInET();
+  const [y, m] = todayET.split('-').map(Number);
+  calendarMonth = { year: y, month: m - 1 };
+  calendarSelectedDay = todayET;
   renderCalendarTabAsync();
 }
 
@@ -1707,7 +1727,7 @@ function renderGoalTreeNode(goal, childrenMap, depth) {
 }
 
 function buildGoalCard(g, opts = {}) {
-  const today        = new Date().toISOString().slice(0, 10);
+  const today        = todayInET();
   const daysToTarget = daysBetween(today, g.targetDate);
   const ownerStaff   = g.owner && STAFF.find(s => s.id === g.owner);
   const pct          = g.totalTasks > 0 ? Math.round((g.doneTasks / g.totalTasks) * 100) : 0;
@@ -1775,7 +1795,7 @@ function renderGoalBody(goalId, tasks) {
     sections.get(s).get(subKey).push(t);
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayInET();
 
   const sectionHtml = [];
   for (const [sectionName, subsectionMap] of sections) {
@@ -2137,14 +2157,14 @@ async function toggleWeeklyTaskDone(id, currentStatus, btnEl) {
 
 function fmtLongDate(iso) {
   if (!iso) return '';
-  const d = new Date(`${iso}T12:00:00`);
-  return `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+  const d = new Date(`${iso}T12:00:00Z`);
+  return `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`;
 }
 
 function fmtShortDate(iso) {
   if (!iso) return '';
-  const d = new Date(`${iso}T12:00:00`);
-  return `${MONTHS[d.getMonth()]} ${d.getDate()}`;
+  const d = new Date(`${iso}T12:00:00Z`);
+  return `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}`;
 }
 
 function daysBetween(fromIso, toIso) {
@@ -2172,7 +2192,7 @@ function renderTasksTab() {
   document.getElementById('task-thead').innerHTML = `<tr>
     <th class="col-task">Task</th>
     <th class="col-notes">Notes</th>
-    ${dates.map((d,i) => `<th class="col-day">${DAYS[i]}<span class="day-num">${d.getDate()}</span></th>`).join('')}
+    ${dates.map((d,i) => `<th class="col-day">${DAYS[i]}<span class="day-num">${d.getUTCDate()}</span></th>`).join('')}
   </tr>`;
 
   // Body
@@ -2364,9 +2384,9 @@ function renderHistoryTab() {
 
   list.innerHTML = keys.map(k => {
     const w = db.weeks[k];
-    const monday = new Date(k + 'T12:00:00');
-    const sat = new Date(monday); sat.setDate(sat.getDate() + 5);
-    const label = `${fmtDate(monday)} – ${fmtDate(sat)}, ${monday.getFullYear()}`;
+    const monday = new Date(k + 'T12:00:00Z');
+    const sat = new Date(monday); sat.setUTCDate(sat.getUTCDate() + 5);
+    const label = `${fmtDate(monday)} – ${fmtDate(sat)}, ${monday.getUTCFullYear()}`;
 
     const allAssign = Object.values(w.assignments||{}).flatMap(Object.values);
     const total = allAssign.length;
@@ -2392,7 +2412,7 @@ function renderHistoryTab() {
 }
 
 function jumpToWeek(key) {
-  currentWeekStart = new Date(key + 'T12:00:00');
+  currentWeekStart = new Date(key + 'T12:00:00Z');
   switchTab('tasks');
   renderAll();
 }
@@ -2819,7 +2839,7 @@ function syncTabButtons() {
 // Test-only hook so Playwright can jump to an isolated week without
 // clicking the week-nav chevrons hundreds of times.
 window.__jumpToWeek = async (key) => {
-  currentWeekStart = new Date(key + 'T12:00:00');
+  currentWeekStart = new Date(key + 'T12:00:00Z');
   loadedWeeks.delete(key);
   await loadWeek(key);
   renderAll();
