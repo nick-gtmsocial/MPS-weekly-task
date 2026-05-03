@@ -9,6 +9,33 @@
 import { requireAuth, setCors } from '../lib/auth.js';
 import { sbGet, sbPost, sbPatch, sbDelete, sbErrorResponse } from '../lib/supabase.js';
 import { generateForClass, addDaysIso } from '../lib/generators.js';
+import { flagsFor } from '../lib/constraints.js';
+
+// Helper: load the live weekly_tasks for the row's week and compute
+// constraint flags for it. Used after any mutation that could create
+// a kiln conflict or assign staff to a day they don't work.
+async function constraintWarnings({ id, week_key, due_date, assignee, phase, status }) {
+  const wk = week_key || (due_date && new Date(`${due_date}T12:00:00Z`));
+  if (!wk) return [];
+  const wkIso = typeof wk === 'string' ? wk : (() => {
+    const d = new Date(wk);
+    const dow = d.getUTCDay();
+    d.setUTCDate(d.getUTCDate() + (dow === 0 ? -6 : 1 - dow));
+    return d.toISOString().slice(0, 10);
+  })();
+  // Pull the surrounding week + the next week so we catch cross-week
+  // kiln conflicts too.
+  const weekEnd = (() => {
+    const d = new Date(`${wkIso}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + 13);
+    return d.toISOString().slice(0, 10);
+  })();
+  const rows = await sbGet(`weekly_tasks?week_key=gte.${wkIso}&week_key=lte.${weekEnd}&deleted_at=is.null&select=id,due_date,phase,assignee,status`);
+  const me = { id, dueDate: due_date, phase, assignee, status };
+  const others = rows.map(r => ({
+    id: r.id, dueDate: r.due_date, phase: r.phase, assignee: r.assignee, status: r.status,
+  }));
+  return flagsFor(me, others);
+}
 
 export default async function handler(req, res) {
   setCors(res);
@@ -34,7 +61,7 @@ async function handleGet(req, res) {
   // Compute the Sunday of the week so goal-task queries can filter by [Mon, Sun].
   const weekEnd = addDaysIso(weekKey, 6);
 
-  const [assignmentRows, specialRows, classRows, goalTaskRows, weeklyTaskRows] = await Promise.all([
+  const [assignmentRows, specialRows, classRows, goalTaskRows, weeklyTaskRows, fireRows] = await Promise.all([
     sbGet(`week_assignments?week_key=eq.${weekKey}&select=task_id,day_idx,assignees,status,note`),
     // Special tasks are NOT week-scoped — multi-week, persistent. Filter
     // out soft-deleted rows here.
@@ -43,6 +70,12 @@ async function handleGet(req, res) {
     sbGet(`classes?week_key=eq.${weekKey}&deleted_at=is.null&select=id,class_num,type,class_date,instructor,kilnfire_link,kilnfire_external_id,notes,created_at,pieces(id,student,description,stage,notes,stage_history,created_at,deleted_at)&order=created_at.asc`),
     sbGet(`goal_tasks?deleted_at=is.null&deadline=lte.${weekEnd}&or=(deadline.gte.${weekKey},status.neq.done)&select=id,goal_id,section,subsection,title,owner,deadline,status,notes,goals(id,title,target_date)&order=deadline.asc.nullslast`),
     sbGet(`weekly_tasks?week_key=eq.${weekKey}&deleted_at=is.null&select=*,classes(type,class_date),pieces(student)&order=due_date.asc,batch_key.asc.nullsfirst`),
+    // Fire schedule is global, not week-scoped. Return upcoming days from
+    // the week's Monday onward so the Kiln tab can render the same source
+    // as the rest of the bundle. Defensive: if the migration hasn't run
+    // yet, return [] instead of breaking the whole bundle fetch.
+    sbGet(`fire_schedule?deleted_at=is.null&fire_date=gte.${weekKey}&select=id,fire_date,phase,capacity,notes&order=fire_date.asc`)
+      .catch(() => []),
   ]);
 
   // PostgREST doesn't filter embedded resources without an !inner hint,
@@ -58,7 +91,18 @@ async function handleGet(req, res) {
     classes:      classRows.map(shapeClass),
     goalTasks:    goalTaskRows.map(shapeGoalTaskForWeek),
     weeklyTasks:  weeklyTaskRows.map(shapeWeeklyTask),
+    fireSchedule: fireRows.map(shapeFireDay),
   });
+}
+
+function shapeFireDay(r) {
+  return {
+    id:       r.id,
+    fireDate: r.fire_date,
+    phase:    r.phase,
+    capacity: r.capacity,
+    notes:    r.notes,
+  };
 }
 
 function shapeWeeklyTask(r) {
@@ -362,7 +406,8 @@ const OPS = {
       assignee:   assignee || null,
       updated_at: new Date().toISOString(),
     });
-    return shapeWeeklyTask(row);
+    const warnings = await constraintWarnings(row);
+    return { ...shapeWeeklyTask(row), warnings };
   },
 
   // Move a task's due date. Recomputes week_key (Monday of new due_date)
@@ -400,7 +445,8 @@ const OPS = {
       batch_key:  newBatchKey,
       updated_at: new Date().toISOString(),
     });
-    return shapeWeeklyTask(row);
+    const warnings = await constraintWarnings(row);
+    return { ...shapeWeeklyTask(row), warnings };
   },
 
   async addManualWeeklyTask({ weekKey, dueDate, title, assignee, durationMinutes, notes }) {
@@ -417,12 +463,72 @@ const OPS = {
       duration_minutes: durationMinutes || null,
       notes:            notes || null,
     });
-    return shapeWeeklyTask(row);
+    const warnings = await constraintWarnings(row);
+    return { ...shapeWeeklyTask(row), warnings };
   },
 
   async deleteWeeklyTask({ id }) {
     requireFields({ id });
     await sbPatch(`weekly_tasks?id=eq.${id}`, { deleted_at: new Date().toISOString() });
+    return { ok: true };
+  },
+
+  // ── fire_schedule ──
+  // Team-curated list of planned kiln fire days. The class generator snaps
+  // bisque/glaze-fire tasks to the next scheduled day of the matching phase
+  // on/after class_date+offset, instead of placing them blindly. Editing the
+  // schedule does NOT retroactively move existing weekly_tasks — re-run
+  // generateForClass(classId) explicitly if you want a class re-snapped.
+  async listFireDays({ from } = {}) {
+    const since = (from && /^\d{4}-\d{2}-\d{2}$/.test(from)) ? from : new Date().toISOString().slice(0, 10);
+    const rows = await sbGet(`fire_schedule?deleted_at=is.null&fire_date=gte.${since}&select=id,fire_date,phase,capacity,notes&order=fire_date.asc`);
+    return rows.map(shapeFireDay);
+  },
+
+  async addFireDay({ fireDate, phase, capacity, notes }) {
+    requireFields({ fireDate, phase });
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(fireDate)) {
+      const err = new Error('fireDate must be YYYY-MM-DD'); err.status = 400; throw err;
+    }
+    if (phase !== 'bisque' && phase !== 'glaze-fire') {
+      const err = new Error("phase must be 'bisque' or 'glaze-fire'"); err.status = 400; throw err;
+    }
+    const [row] = await sbPost('fire_schedule', {
+      fire_date: fireDate,
+      phase,
+      capacity:  capacity == null ? null : Number(capacity),
+      notes:     notes || null,
+    });
+    return shapeFireDay(row);
+  },
+
+  async updateFireDay({ id, fireDate, phase, capacity, notes }) {
+    requireFields({ id });
+    const patch = { updated_at: new Date().toISOString() };
+    if (fireDate !== undefined) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(fireDate)) {
+        const err = new Error('fireDate must be YYYY-MM-DD'); err.status = 400; throw err;
+      }
+      patch.fire_date = fireDate;
+    }
+    if (phase !== undefined) {
+      if (phase !== 'bisque' && phase !== 'glaze-fire') {
+        const err = new Error("phase must be 'bisque' or 'glaze-fire'"); err.status = 400; throw err;
+      }
+      patch.phase = phase;
+    }
+    if (capacity !== undefined) patch.capacity = capacity == null ? null : Number(capacity);
+    if (notes    !== undefined) patch.notes    = notes || null;
+    const [row] = await sbPatch(`fire_schedule?id=eq.${id}`, patch);
+    return shapeFireDay(row);
+  },
+
+  async deleteFireDay({ id }) {
+    requireFields({ id });
+    await sbPatch(`fire_schedule?id=eq.${id}`, {
+      deleted_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
     return { ok: true };
   },
 };

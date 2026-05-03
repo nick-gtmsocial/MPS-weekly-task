@@ -345,6 +345,28 @@ a:hover{text-decoration:underline}
 .staff-check input:checked+.check-chip{opacity:1;transform:scale(1.1)}
 .modal-actions{padding:16px 20px 20px;display:flex;gap:8px;justify-content:flex-end;border-top:1px solid var(--border);margin-top:16px}
 
+/* ── CONSTRAINT FLAGS ── */
+.task-flags{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center}
+.task-flag{font-size:11px;font-weight:600;padding:3px 8px;border-radius:4px;display:inline-flex;align-items:center;gap:4px}
+.task-flag.flag-kiln-conflict{background:#FEE2E2;color:#991B1B}
+.task-flag.flag-unavailable  {background:#FEF3C7;color:#92400E}
+.task-flag.flag-over-cap     {background:#FED7AA;color:#9A3412}
+.task-flag-move{background:var(--teal-light);color:var(--teal-dark);border:1px solid transparent;border-radius:4px;font-size:11px;font-weight:600;padding:3px 8px;cursor:pointer;transition:all .15s}
+.task-flag-move:hover{background:var(--teal);color:#fff;border-color:var(--teal-dark)}
+
+/* Kiln tab — fire-schedule rows. Date | phase pill | notes | actions. */
+.kiln-rows{display:flex;flex-direction:column;gap:8px}
+.kiln-row{display:grid;grid-template-columns:160px 110px 1fr auto;gap:14px;align-items:center;padding:12px 14px;border:1px solid var(--border);border-radius:6px;background:#fff}
+.kiln-date-day{font-weight:600;font-size:14px;color:var(--ink)}
+.kiln-date-iso{font-size:11px;color:var(--gray);font-variant-numeric:tabular-nums}
+.kiln-phase{display:inline-block;padding:4px 10px;border-radius:4px;font-size:12px;font-weight:600;text-align:center}
+.kiln-phase.phase-bisque{background:#FFEDD5;color:#9A3412}
+.kiln-phase.phase-glaze-fire{background:#DBEAFE;color:#1E3A8A}
+.kiln-notes{font-size:13px;color:var(--ink)}
+.kiln-actions{display:flex;gap:6px}
+.radio-row{display:flex;gap:18px;font-size:14px;padding:6px 0}
+.radio-row label{display:flex;align-items:center;gap:6px;cursor:pointer}
+
 /* ─────────────────────────────────────────────────────────────
    MOBILE — narrow-screen overrides for phone-friendly rendering.
    Triggered at <=720px (covers all common phone widths in landscape
@@ -473,6 +495,7 @@ a:hover{text-decoration:underline}
   <button class="tab-btn" data-tab="me"       onclick="switchTab('me')">My Week</button>
   <button class="tab-btn" data-tab="planner"  onclick="switchTab('planner')">Planner</button>
   <button class="tab-btn" data-tab="calendar" onclick="switchTab('calendar')">Calendar</button>
+  <button class="tab-btn" data-tab="kiln"     onclick="switchTab('kiln')">Kiln</button>
   <button class="tab-btn active" data-tab="tasks"   onclick="switchTab('tasks')">Weekly Tasks</button>
   <button class="tab-btn" data-tab="classes"  onclick="switchTab('classes')">Classes</button>
   <button class="tab-btn" data-tab="special"  onclick="switchTab('special')">Special Tasks</button>
@@ -505,6 +528,20 @@ a:hover{text-decoration:underline}
     <div id="calendar-toolbar"></div>
     <div id="calendar-grid"></div>
     <div id="calendar-day-tasks"></div>
+  </div>
+
+  <!-- KILN — team-curated fire schedule. Drives where new class kiln tasks land. -->
+  <div id="tab-kiln" class="tab-panel">
+    <div class="section-top">
+      <div>
+        <h2 style="margin:0;">Kiln schedule</h2>
+        <p style="margin:4px 0 0;color:var(--gray);font-size:13px;">
+          Plan upcoming bisque + glaze fires. New class tasks snap to the next scheduled day of the matching phase — same phase same day = batched fire (good); cross-phase same day = blocked.
+        </p>
+      </div>
+      <button class="btn btn-primary" onclick="openAddFireDayModal()">+ Schedule a fire</button>
+    </div>
+    <div id="kiln-list"></div>
   </div>
 
   <!-- TASKS -->
@@ -673,7 +710,7 @@ function getMonday(date) {
 
 let currentWeekStart = getMonday(new Date());
 let activeTab = 'tasks';
-let db = { weeks: {}, goals: [], templates: [], specialTasks: [] };
+let db = { weeks: {}, goals: [], templates: [], specialTasks: [], fireSchedule: [] };
 let loadedWeeks = new Set();      // weeks we've fetched (regardless of emptiness)
 let goalsLoaded = false;          // one-time lazy load of goals + templates
 let modalState = null;
@@ -774,6 +811,9 @@ async function loadWeek(key) {
     weeklyTasks:  bundle.weeklyTasks   || [],
   };
   db.specialTasks = bundle.specialTasks || [];
+  // Fire schedule is global (not week-scoped). Each week-load returns the
+  // upcoming days from that week's Monday onward; we keep the freshest copy.
+  db.fireSchedule = bundle.fireSchedule || [];
   loadedWeeks.add(key);
   return db.weeks[key];
 }
@@ -914,6 +954,7 @@ function renderTabContent(tab) {
   if (tab === 'me')       renderMyWeekTab();
   if (tab === 'planner')  renderPlannerTab();
   if (tab === 'calendar') renderCalendarTabAsync();
+  if (tab === 'kiln')     renderKilnTab();
   if (tab === 'tasks')    renderTasksTab();
   if (tab === 'classes')  renderClassesTab();
   if (tab === 'special')  renderSpecialTab();
@@ -1049,16 +1090,19 @@ function renderMyWeekTab() {
 
   // Auto-generated weekly_tasks (class/piece/recurring/manual). Goal/special
   // weekly_tasks are surfaced via their source tables above to avoid duping.
-  for (const t of week.weeklyTasks || []) {
+  const allWeeklyForFlags = week.weeklyTasks || [];
+  for (const t of allWeeklyForFlags) {
     if (t.assignee !== currentUser) continue;
     if (t.sourceKind === 'goal' || t.sourceKind === 'special') continue;
     const classLabel = t.classType
       ? ` · ${t.classType}${t.classDate ? ' · ' + fmtShortDate(t.classDate) : ''}`
       : '';
+    const flags = renderTaskFlags(t, allWeeklyForFlags);
     myItems.push({
       source:    t.sourceKind === 'recurring' ? 'recurring' : 'task',
       title:     t.title + classLabel,
       notes:     t.notes || '',
+      flags,                                     // pre-computed; renderCard injects below the title
       status:    t.status || 'todo',
       dateIso:   t.dueDate || null,
       dayLabel:  t.dueDate ? `Due ${fmtShortDate(t.dueDate)}` : '',
@@ -1111,6 +1155,7 @@ function renderMyWeekTab() {
       <div class="me-card-main">
         <div class="me-card-title">${item.title}</div>
         ${item.notes ? `<div class="me-card-notes">${item.notes}</div>` : ''}
+        ${item.flags || ''}
       </div>
       <div class="me-card-meta">
         ${batchPill}
@@ -1259,6 +1304,8 @@ function renderPlannerTab() {
     return a.localeCompare(b);
   });
 
+  // Pass the full week's tasks into each row's render so flagsFor() can
+  // detect cross-row conflicts (e.g. two bisque fires on the same day).
   const html = sortedDays.map(d => {
     let dayLabel;
     if (d === '__no_date__') {
@@ -1270,19 +1317,20 @@ function renderPlannerTab() {
     return `
       <div class="planner-day">
         <div class="planner-day-head">${dayLabel}<span class="planner-day-count">${byDay.get(d).length}</span></div>
-        ${byDay.get(d).map(renderPlannerRow).join('')}
+        ${byDay.get(d).map(t => renderPlannerRow(t, all)).join('')}
       </div>`;
   }).join('');
 
   host.innerHTML = html;
 }
 
-function renderPlannerRow(t) {
+function renderPlannerRow(t, allInWeek) {
   const isDone = t.status === 'done';
   const classLabel = t.classType
     ? ` · ${t.classType}${t.classDate ? ' · ' + fmtShortDate(t.classDate) : ''}`
     : '';
   const batchPill  = t.batchKey ? `<span class="me-card-batch">batch</span>` : '';
+  const flagsHtml  = renderTaskFlags(t, allInWeek);
 
   let sourceCls, sourceText;
   if (t.sourceKind === 'recurring')   { sourceCls = 'recurring'; sourceText = 'Chore'; }
@@ -1302,6 +1350,7 @@ function renderPlannerRow(t) {
       <div class="planner-row-main">
         <div class="planner-row-title">${t.title}${classLabel}</div>
         ${t.notes ? `<div class="planner-row-notes">${t.notes}</div>` : ''}
+        ${flagsHtml}
       </div>
       ${batchPill}
       <input type="date" class="task-date-input" value="${t.dueDate || ''}" title="Due date" onchange="plannerChangeDate('${t.id}', '${t.sourceKind}', this.value)">
@@ -1600,6 +1649,14 @@ function summarizeOwners(tasks) {
 }
 
 function renderCalendarDayPanel(iso, tasks) {
+  // Use the whole loaded month so constraints (weekly cap, cross-day
+  // kiln conflicts) see the full context, not just one day.
+  const all = (calendarTasks || []).concat(
+    (db.specialTasks || []).filter(s => s.deadline).map(s => ({
+      id: s.id, dueDate: s.deadline, title: s.title, assignee: s.staffId,
+      status: s.status, sourceKind: 'special', phase: null,
+    })),
+  );
   const rows = tasks.map(t => {
     const isDone     = t.status === 'done';
     const ownerStaff = t.assignee && STAFF.find(s => s.id === t.assignee);
@@ -1609,9 +1666,10 @@ function renderCalendarDayPanel(iso, tasks) {
       : '';
     const sourceTag = t.sourceKind === 'special'
       ? `<span class="me-card-source special">Special</span>` : '';
+    const flagsHtml = renderTaskFlags(t, all);
     return `
       <div class="cal-day-row ${isDone ? 'is-done' : ''}">
-        ${sourceTag}<div class="cal-day-row-title">${t.title}${classLabel}</div>
+        ${sourceTag}<div class="cal-day-row-title">${t.title}${classLabel}${flagsHtml}</div>
         <input type="date" class="task-date-input" value="${t.dueDate || ''}" title="Move to a different day" onchange="calendarChangeDate('${t.id}', '${t.sourceKind || 'task'}', this.value)">
         <span class="me-card-status ${t.status}">${STATUS_LABELS[t.status] || t.status}</span>
         <span class="cal-day-row-owner" ${ownerStaff ? `style="background:${ownerStaff.color}22;color:${ownerStaff.color}"` : ''}>${ownerLabel}</span>
@@ -2182,6 +2240,132 @@ function escapeAttr(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
 }
 
+// ── KILN TAB ───────────────────────────────────
+//
+// Lists upcoming team-scheduled fire days, grouped by phase. Adding a row
+// here is what tells the generator where new bisque/glaze fires should
+// land. Editing this tab does NOT retroactively move tasks already on the
+// board — re-run a class's generation explicitly if you want it re-snapped.
+
+function renderKilnTab() {
+  const root = document.getElementById('kiln-list');
+  if (!root) return;
+  const today = todayInET();
+  const upcoming = (db.fireSchedule || [])
+    .filter(f => f.fireDate >= today)
+    .sort((a, b) => a.fireDate.localeCompare(b.fireDate));
+
+  if (!upcoming.length) {
+    root.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">No fires scheduled</div>
+        <p>Click <b>+ Schedule a fire</b> to plan the next bisque or glaze fire.</p>
+        <p style="font-size:12px;color:var(--gray);">Until you add some, new class kiln tasks fall back to walking forward from class_date + offset until they find a non-conflicting slot.</p>
+      </div>`;
+    return;
+  }
+
+  // Group by month for readability — Cielo plans in monthly chunks.
+  const byMonth = new Map();
+  for (const f of upcoming) {
+    const ym = f.fireDate.slice(0, 7);
+    if (!byMonth.has(ym)) byMonth.set(ym, []);
+    byMonth.get(ym).push(f);
+  }
+
+  let html = '';
+  for (const [ym, rows] of byMonth) {
+    const [y, m] = ym.split('-').map(Number);
+    const label = `${MONTHS[m - 1]} ${y}`;
+    html += `<h3 style="margin:18px 0 8px;font-size:14px;color:var(--teal-dark);text-transform:uppercase;letter-spacing:1px;">${label}</h3>`;
+    html += '<div class="kiln-rows">';
+    for (const f of rows) {
+      const d = new Date(`${f.fireDate}T12:00:00Z`);
+      const dayName = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getUTCDay()];
+      const phaseLabel = f.phase === 'bisque' ? 'Bisque' : 'Glaze fire';
+      const phaseClass = f.phase === 'bisque' ? 'phase-bisque' : 'phase-glaze-fire';
+      html += `
+        <div class="kiln-row">
+          <div class="kiln-date">
+            <div class="kiln-date-day">${dayName} ${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}</div>
+            <div class="kiln-date-iso">${f.fireDate}</div>
+          </div>
+          <div class="kiln-phase ${phaseClass}">${phaseLabel}</div>
+          <div class="kiln-notes">${f.notes ? escapeAttr(f.notes) : '<span style="color:var(--gray);">—</span>'}</div>
+          <div class="kiln-actions">
+            <button class="btn btn-outline btn-sm" onclick="deleteFireDay('${f.id}')">Remove</button>
+          </div>
+        </div>`;
+    }
+    html += '</div>';
+  }
+  root.innerHTML = html;
+}
+
+function openAddFireDayModal() {
+  const today = todayInET();
+  // Default to "next week, same day" so the team usually only adjusts the
+  // phase + notes — covers the common "keep firing on Tuesdays" pattern.
+  const defaultDate = addDaysIso(today, 7);
+  modalState = { mode: 'add' };
+  document.getElementById('modal-content').innerHTML = `
+    <div class="modal-card">
+      <h2>Schedule a fire</h2>
+      <div class="form-field">
+        <label>Date</label>
+        <input type="date" id="fire-date" value="${defaultDate}" min="${today}">
+      </div>
+      <div class="form-field">
+        <label>Phase</label>
+        <div class="radio-row">
+          <label><input type="radio" name="fire-phase" value="bisque" checked> Bisque</label>
+          <label><input type="radio" name="fire-phase" value="glaze-fire"> Glaze fire</label>
+        </div>
+      </div>
+      <div class="form-field">
+        <label>Notes (optional)</label>
+        <input type="text" id="fire-notes" placeholder="e.g., test loads, color experiments">
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveFireDay()">Schedule</button>
+      </div>
+    </div>`;
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+async function saveFireDay() {
+  const fireDate = document.getElementById('fire-date').value;
+  const phase    = document.querySelector('input[name="fire-phase"]:checked')?.value;
+  const notes    = document.getElementById('fire-notes').value.trim();
+  if (!fireDate || !phase) {
+    alert('Pick a date and phase.');
+    return;
+  }
+  try {
+    const row = await api('addFireDay', { fireDate, phase, notes: notes || null });
+    db.fireSchedule = [...(db.fireSchedule || []), row]
+      .sort((a, b) => a.fireDate.localeCompare(b.fireDate));
+    closeModal();
+    renderKilnTab();
+  } catch (e) {
+    alert(`Couldn't schedule: ${e.message}`);
+  }
+}
+
+async function deleteFireDay(id) {
+  const row = (db.fireSchedule || []).find(f => f.id === id);
+  if (!row) return;
+  if (!confirm(`Remove the ${row.phase} fire on ${row.fireDate}?`)) return;
+  try {
+    await api('deleteFireDay', { id });
+    db.fireSchedule = (db.fireSchedule || []).filter(f => f.id !== id);
+    renderKilnTab();
+  } catch (e) {
+    alert(`Couldn't remove: ${e.message}`);
+  }
+}
+
 // ── TASKS TAB ──────────────────────────────────
 
 function renderTasksTab() {
@@ -2349,6 +2533,118 @@ function renderSpecialTab() {
 }
 
 const STATUS_LABELS = { todo:'To Do', 'in-progress':'In Progress', done:'Done', issue:'Issue' };
+
+// === CONSTRAINTS === (mirror of lib/constraints.js — keep in sync)
+// Phases that share the studio's single kiln. Two of these on the
+// same day = conflict.
+const KILN_FIRE_PHASES = ['bisque', 'glaze-fire'];
+// Per-staff availability rules. Add entries as constraints surface.
+const STAFF_AVAILABILITY = {
+  miso: {
+    days: ['Tue','Wed','Thu','Fri','Sat'],
+    maxPerWeek: 3,
+    note: 'Miso loads the kiln. Not available Sun/Mon. Max 3 days/week.',
+  },
+};
+const _DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+function _dayName(iso) { return _DAY_NAMES[new Date(`${iso}T12:00:00Z`).getUTCDay()]; }
+function _mondayOf(iso) {
+  const d = new Date(`${iso}T12:00:00Z`);
+  const dow = d.getUTCDay();
+  d.setUTCDate(d.getUTCDate() + (dow === 0 ? -6 : 1 - dow));
+  return d.toISOString().slice(0, 10);
+}
+function flagsFor(task, all) {
+  const flags = [];
+  if (!task) return flags;
+  const isKiln = task.phase && KILN_FIRE_PHASES.includes(task.phase);
+  const avail  = task.assignee && STAFF_AVAILABILITY[task.assignee];
+
+  if (isKiln && task.dueDate) {
+    // Same-phase same-day = intentional batch (kiln packed full); only
+    // cross-phase on the same day is a real conflict (kiln can't run
+    // bisque + glaze-fire at the same time).
+    const others = (all || []).filter(t => t && t.id !== task.id
+      && t.dueDate === task.dueDate
+      && KILN_FIRE_PHASES.includes(t.phase)
+      && t.phase !== task.phase
+      && t.status !== 'cancelled');
+    if (others.length) {
+      const otherPhases = [...new Set(others.map(o => o.phase))].join(', ');
+      flags.push({
+        kind: 'kiln-conflict',
+        message: `Kiln conflict — ${task.phase} can't run with ${otherPhases} on ${task.dueDate}`,
+      });
+    }
+  }
+  if (avail && task.dueDate) {
+    const dn = _dayName(task.dueDate);
+    if (!avail.days.includes(dn)) {
+      flags.push({ kind: 'unavailable', message: `${task.assignee} unavailable on ${dn}` });
+    } else {
+      const wk = _mondayOf(task.dueDate);
+      const days = new Set();
+      for (const t of (all || [])) {
+        if (!t || t.id === task.id) continue;
+        if (t.assignee !== task.assignee || !t.dueDate) continue;
+        if (t.status === 'done' || t.status === 'cancelled') continue;
+        if (_mondayOf(t.dueDate) !== wk) continue;
+        days.add(t.dueDate);
+      }
+      if (days.size >= avail.maxPerWeek) {
+        flags.push({ kind: 'over-cap', message: `${task.assignee} over weekly cap (${avail.maxPerWeek}/wk)` });
+      }
+    }
+  }
+  return flags;
+}
+function findNextValidDay({ fromIso, assignee, phase }, all) {
+  const isKiln = phase && KILN_FIRE_PHASES.includes(phase);
+  const avail  = assignee && STAFF_AVAILABILITY[assignee];
+  for (let i = 0; i < 30; i++) {
+    const d = new Date(`${fromIso}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + i);
+    const cand = d.toISOString().slice(0, 10);
+    if (avail && !avail.days.includes(_dayName(cand))) continue;
+    if (avail) {
+      const wk = _mondayOf(cand);
+      const days = new Set();
+      for (const t of (all || [])) {
+        if (!t || t.assignee !== assignee || !t.dueDate) continue;
+        if (t.status === 'done' || t.status === 'cancelled') continue;
+        if (_mondayOf(t.dueDate) !== wk) continue;
+        days.add(t.dueDate);
+      }
+      if (!days.has(cand) && days.size >= avail.maxPerWeek) continue;
+    }
+    if (isKiln) {
+      const conflict = (all || []).find(t => t && t.dueDate === cand
+        && KILN_FIRE_PHASES.includes(t.phase)
+        && t.phase !== phase
+        && t.status !== 'cancelled');
+      if (conflict) continue;
+    }
+    return cand;
+  }
+  return null;
+}
+// Render flag pills + a "Find next slot" affordance, which the caller
+// wires to setWeeklyTaskDueDate via api(). The button hides on mobile
+// to save space (badges still visible).
+function renderTaskFlags(task, all) {
+  const flags = flagsFor(task, all);
+  if (!flags.length) return '';
+  const pills = flags.map(f =>
+    `<span class="task-flag flag-${f.kind}" title="${escapeAttr(f.message)}">${
+      f.kind === 'kiln-conflict' ? '🔥' : f.kind === 'unavailable' ? '🚫' : '⚠'
+    } ${escapeHtml(f.message)}</span>`
+  ).join('');
+  const isKiln = KILN_FIRE_PHASES.includes(task.phase);
+  const next = findNextValidDay({ fromIso: task.dueDate, assignee: task.assignee, phase: task.phase }, all);
+  const moveBtn = next && next !== task.dueDate
+    ? `<button class="task-flag-move" title="Move to ${next}" onclick="event.stopPropagation(); changeTaskDueDate('${task.id}', '${next}')">→ ${fmtShortDate(next)}</button>`
+    : '';
+  return `<div class="task-flags">${pills}${moveBtn}</div>`;
+}
 
 function buildSpecialCard(task) {
   const status = task.status || 'todo';
@@ -2845,6 +3141,8 @@ window.__jumpToWeek = async (key) => {
 // so evaluate() can't reach them — this is the supported access path.
 window.__getDb = () => db;
 window.__getStaff = () => STAFF;
+window.flagsFor = flagsFor;
+window.findNextValidDay = findNextValidDay;
 </script>
 </body>
 </html>
