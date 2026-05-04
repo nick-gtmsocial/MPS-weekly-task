@@ -247,9 +247,14 @@ def main():
     # ── Insert ──
     inserted = 0
     errors: list[dict] = []
-    for c in fresh:
+    # During dry-run, walk ALL candidates (even ones already in our DB) so
+    # the log doubles as an attendance audit. Useful when backfilling
+    # pieces for previously-imported classes.
+    walk = candidates if args.dry_run else fresh
+    for c in walk:
         if args.dry_run:
-            print(f"  DRY-RUN would insert {c['type_name']} on {c['class_date']} ({c['kf_id']}, ~{c['attendees']} attendees)")
+            tag = " [NEW]" if c["kf_id"] not in seen else " [in DB]"
+            print(f"  DRY {c['type_name']:30s} {c['class_date']} kf={c['kf_id']} ~{c['attendees']} attendees{tag}")
             continue
         try:
             res = post_class(args.base_url, args.password, {
