@@ -364,6 +364,11 @@ a:hover{text-decoration:underline}
 .kiln-phase.phase-glaze-fire{background:#DBEAFE;color:#1E3A8A}
 .kiln-notes{font-size:13px;color:var(--ink)}
 .kiln-actions{display:flex;gap:6px}
+.kiln-load{margin-top:6px;font-size:12px;color:var(--gray);display:flex;flex-wrap:wrap;gap:6px;align-items:baseline}
+.kiln-load-summary{font-weight:600;color:var(--ink)}
+.kiln-load-class{padding:1px 6px;border-radius:3px;background:var(--gray-light);color:var(--ink)}
+.class-students{cursor:pointer;padding:1px 6px;border-radius:3px;background:#FEF3C7;color:#92400E;font-weight:600}
+.class-students:hover{background:#FDE68A}
 .radio-row{display:flex;gap:18px;font-size:14px;padding:6px 0}
 .radio-row label{display:flex;align-items:center;gap:6px;cursor:pointer}
 
@@ -2247,7 +2252,7 @@ function escapeAttr(s) {
 // land. Editing this tab does NOT retroactively move tasks already on the
 // board — re-run a class's generation explicitly if you want it re-snapped.
 
-function renderKilnTab() {
+async function renderKilnTab() {
   const root = document.getElementById('kiln-list');
   if (!root) return;
   const today = todayInET();
@@ -2263,6 +2268,17 @@ function renderKilnTab() {
         <p style="font-size:12px;color:var(--gray);">Until you add some, new class kiln tasks fall back to walking forward from class_date + offset until they find a non-conflicting slot.</p>
       </div>`;
     return;
+  }
+
+  // Load preview — which classes feed each fire day. Renders inline once
+  // the API returns; the row skeleton is up immediately so there's no
+  // visible blank period.
+  let loadByFireId = new Map();
+  try {
+    const preview = await api('kilnLoadPreview', { from: today });
+    loadByFireId = new Map(preview.map(p => [p.fireDayId, p]));
+  } catch (e) {
+    console.warn('kilnLoadPreview failed (non-fatal — rows render without load info)', e);
   }
 
   // Group by month for readability — Cielo plans in monthly chunks.
@@ -2284,6 +2300,19 @@ function renderKilnTab() {
       const dayName = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getUTCDay()];
       const phaseLabel = f.phase === 'bisque' ? 'Bisque' : 'Glaze fire';
       const phaseClass = f.phase === 'bisque' ? 'phase-bisque' : 'phase-glaze-fire';
+      const load = loadByFireId.get(f.id);
+      let loadHtml = '';
+      if (load && load.classes.length) {
+        const chips = load.classes.map(c =>
+          `<span class="kiln-load-class">${escapeAttr(c.type || '?')} · ${c.studentCount} student${c.studentCount === 1 ? '' : 's'}</span>`
+        ).join('');
+        loadHtml = `<div class="kiln-load">
+          <span class="kiln-load-summary">~${load.totalStudents} student${load.totalStudents === 1 ? '' : 's'} queued</span>
+          <span>·</span>${chips}
+        </div>`;
+      } else if (load) {
+        loadHtml = `<div class="kiln-load"><span class="kiln-load-summary" style="color:var(--gray);">No classes feeding this fire yet</span></div>`;
+      }
       html += `
         <div class="kiln-row">
           <div class="kiln-date">
@@ -2291,7 +2320,10 @@ function renderKilnTab() {
             <div class="kiln-date-iso">${f.fireDate}</div>
           </div>
           <div class="kiln-phase ${phaseClass}">${phaseLabel}</div>
-          <div class="kiln-notes">${f.notes ? escapeAttr(f.notes) : '<span style="color:var(--gray);">—</span>'}</div>
+          <div class="kiln-notes">
+            ${f.notes ? escapeAttr(f.notes) : '<span style="color:var(--gray);">—</span>'}
+            ${loadHtml}
+          </div>
           <div class="kiln-actions">
             <button class="btn btn-outline btn-sm" onclick="deleteFireDay('${f.id}')">Remove</button>
           </div>
@@ -2490,6 +2522,10 @@ function buildClassCard(c) {
         <div class="class-meta">
           ${c.date ? `<span>${c.date}</span>` : ''}
           ${c.instructor ? `<span>Instructor: ${c.instructor}</span>` : ''}
+          <span class="class-students" title="Click to edit — drives whether kiln tasks generate"
+                onclick="editStudentCount('${c.id}')">
+            ${c.studentCount ?? 0} student${(c.studentCount ?? 0) === 1 ? '' : 's'}
+          </span>
           ${c.notes ? `<span>${c.notes}</span>` : ''}
         </div>
       </div>
@@ -2826,6 +2862,8 @@ function buildClassForm(c={}) {
         <input type="date" id="cls-date" value="${c.date||''}"></div>
       <div class="form-field"><label>Instructor</label>
         <select id="cls-instr"><option value="">— Select —</option>${instrOpts}</select></div>
+      <div class="form-field"><label>Students <span style="font-weight:400;color:var(--gray);font-size:12px;">(0 = no kiln tasks generated)</span></label>
+        <input type="number" id="cls-students" value="${c.studentCount ?? 0}" min="0" step="1"></div>
       <div class="form-field"><label>Kilnfire Link (paste URL)</label>
         <input type="url" id="cls-link" value="${c.kilnfireLink||''}" placeholder="https://..."></div>
       <div class="form-field"><label>Notes</label>
@@ -2846,6 +2884,7 @@ async function saveClass() {
     type:         document.getElementById('cls-type').value,
     date:         document.getElementById('cls-date').value,
     instructor:   document.getElementById('cls-instr').value,
+    studentCount: parseInt(document.getElementById('cls-students').value, 10) || 0,
     kilnfireLink: document.getElementById('cls-link').value,
     notes:        document.getElementById('cls-notes').value,
   };
@@ -2872,6 +2911,33 @@ async function deleteClass(id) {
   renderClassesTab();
   try { await api('deleteClass', { id }); }
   catch (e) { await loadWeek(key); renderClassesTab(); }
+}
+
+// Inline-edit the student count from the class card. Bumping from 0 to a
+// positive number triggers backend regeneration which adds the now-eligible
+// kiln tasks (bisque + glaze). Existing tasks are not touched.
+async function editStudentCount(classId) {
+  const key = weekKey(currentWeekStart);
+  const week = getWeek(key);
+  const cls = week.classes.find(c => c.id === classId);
+  if (!cls) return;
+  const current = cls.studentCount ?? 0;
+  const raw = prompt(`How many students attended ${cls.type || 'this class'}?`, String(current));
+  if (raw === null) return;
+  const n = parseInt(raw, 10);
+  if (Number.isNaN(n) || n < 0) { alert('Enter a non-negative whole number.'); return; }
+  if (n === current) return;
+  cls.studentCount = n;                   // optimistic
+  renderClassesTab();
+  try {
+    await api('setStudentCount', { id: classId, studentCount: n });
+    await loadWeek(key);                  // refresh — generation may have added kiln tasks
+    renderAll();
+  } catch (e) {
+    alert(`Couldn't update: ${e.message}`);
+    await loadWeek(key);
+    renderClassesTab();
+  }
 }
 
 // Piece modals

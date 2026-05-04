@@ -67,7 +67,7 @@ async function handleGet(req, res) {
     // out soft-deleted rows here.
     sbGet(`special_tasks?deleted_at=is.null&select=id,staff_id,title,scope,deadline,status,week_key,created_at,special_task_updates(id,update_date,text,created_at)&order=deadline.asc.nullslast`),
     // Pieces are filtered to live ones via the embedded resource filter.
-    sbGet(`classes?week_key=eq.${weekKey}&deleted_at=is.null&select=id,class_num,type,class_date,instructor,kilnfire_link,kilnfire_external_id,notes,created_at,pieces(id,student,description,stage,notes,stage_history,created_at,deleted_at)&order=created_at.asc`),
+    sbGet(`classes?week_key=eq.${weekKey}&deleted_at=is.null&select=id,class_num,type,class_date,instructor,student_count,kilnfire_link,kilnfire_external_id,notes,created_at,pieces(id,student,description,stage,notes,stage_history,created_at,deleted_at)&order=created_at.asc`),
     sbGet(`goal_tasks?deleted_at=is.null&deadline=lte.${weekEnd}&or=(deadline.gte.${weekKey},status.neq.done)&select=id,goal_id,section,subsection,title,owner,deadline,status,notes,goals(id,title,target_date)&order=deadline.asc.nullslast`),
     sbGet(`weekly_tasks?week_key=eq.${weekKey}&deleted_at=is.null&select=*,classes(type,class_date),pieces(student)&order=due_date.asc,batch_key.asc.nullsfirst`),
     // Fire schedule is global, not week-scoped. Return upcoming days from
@@ -180,6 +180,7 @@ function shapeClass(r) {
     type:                 r.type,
     date:                 r.class_date,
     instructor:           r.instructor,
+    studentCount:         r.student_count ?? 0,
     kilnfireLink:         r.kilnfire_link,
     kilnfireExternalId:   r.kilnfire_external_id,
     notes:                r.notes,
@@ -279,7 +280,7 @@ const OPS = {
   },
 
   // ── classes ──
-  async addClass({ weekKey, classNum, type, date, instructor, kilnfireLink, kilnfireExternalId, notes }) {
+  async addClass({ weekKey, classNum, type, date, instructor, studentCount, kilnfireLink, kilnfireExternalId, notes }) {
     requireFields({ weekKey });
     const [row] = await sbPost('classes', {
       week_key:             weekKey,
@@ -287,14 +288,14 @@ const OPS = {
       type:                 type               || null,
       class_date:           date               || null,
       instructor:           instructor         || null,
+      student_count:        Number.isFinite(+studentCount) ? +studentCount : 0,
       kilnfire_link:        kilnfireLink       || null,
       kilnfire_external_id: kilnfireExternalId || null,
       notes:                notes              || null,
     });
     // Auto-generate follow-on tasks if the class type matches a known
-    // class_types row. Generator is forgiving — it returns a no-op result
-    // for unmatched types instead of throwing, so a free-form class type
-    // doesn't block class creation.
+    // class_types row. Generator is non-destructive (insert-on-conflict-
+    // do-nothing) and student-count-aware (no fires for empty classes).
     let generation = null;
     if (row.class_date && row.type) {
       try { generation = await generateForClass(row.id); }
@@ -303,18 +304,34 @@ const OPS = {
     return { ...shapeClass({ ...row, pieces: [] }), generation };
   },
 
-  async updateClass({ id, classNum, type, date, instructor, kilnfireLink, notes }) {
+  async updateClass({ id, classNum, type, date, instructor, studentCount, kilnfireLink, notes }) {
     requireFields({ id });
     const patch = {};
     if (classNum     !== undefined) patch.class_num     = classNum;
     if (type         !== undefined) patch.type          = type;
     if (date         !== undefined) patch.class_date    = date;
     if (instructor   !== undefined) patch.instructor    = instructor;
+    if (studentCount !== undefined) patch.student_count = Number.isFinite(+studentCount) ? +studentCount : 0;
     if (kilnfireLink !== undefined) patch.kilnfire_link = kilnfireLink;
     if (notes        !== undefined) patch.notes         = notes;
     patch.updated_at = new Date().toISOString();
     const [row] = await sbPatch(`classes?id=eq.${id}`, patch);
-    return shapeClass({ ...row, pieces: [] });
+    // If student_count was bumped from 0 → positive, the kiln-phase tasks
+    // that were previously gated out can now be added. Re-run generation
+    // (non-destructive — won't touch existing rows). If it dropped to 0,
+    // we leave existing kiln tasks alone — the team can soft-delete them
+    // by hand if they want.
+    let generation = null;
+    if (studentCount !== undefined && row.class_date && row.type) {
+      try { generation = await generateForClass(row.id); }
+      catch (e) { generation = { error: e.message }; }
+    }
+    return { ...shapeClass({ ...row, pieces: [] }), generation };
+  },
+
+  // Convenience op for inline-editable student count. Wraps updateClass.
+  async setStudentCount({ id, studentCount }) {
+    return await OPS.updateClass({ id, studentCount });
   },
 
   async deleteClass({ id }) {
@@ -530,6 +547,59 @@ const OPS = {
       updated_at: new Date().toISOString(),
     });
     return { ok: true };
+  },
+
+  // Load preview for upcoming fires: which classes feed into each scheduled
+  // fire day, and the rough total student count. The team uses this to
+  // decide "fire it" vs "push to next slot" — Cielo's "we can't fire when
+  // it's not efficient" check made visible.
+  async kilnLoadPreview({ from } = {}) {
+    const since = (from && /^\d{4}-\d{2}-\d{2}$/.test(from)) ? from : new Date().toISOString().slice(0, 10);
+    const fires = await sbGet(
+      `fire_schedule?deleted_at=is.null&fire_date=gte.${since}&select=id,fire_date,phase&order=fire_date.asc`
+    );
+    if (!fires.length) return [];
+
+    // One join across all upcoming fire days. Filter weekly_tasks by the
+    // distinct (date, phase) pairs we care about. PostgREST `or` syntax
+    // would balloon — instead pull the union of dates + phases and bucket
+    // client-side. Bounded: a few months of fires × tasks.
+    const dates  = [...new Set(fires.map(f => f.fire_date))];
+    const phases = [...new Set(fires.map(f => f.phase))];
+    const taskRows = await sbGet(
+      `weekly_tasks?deleted_at=is.null&due_date=in.(${dates.join(',')})&phase=in.(${phases.join(',')})&select=class_id,phase,due_date,classes(id,type,class_date,student_count,deleted_at)`
+    );
+
+    return fires.map(f => {
+      const contributors = taskRows.filter(t =>
+        t.due_date === f.fire_date &&
+        t.phase    === f.phase &&
+        t.classes && !t.classes.deleted_at
+      );
+      // Dedup by class_id — a class can produce one bisque task per fire
+      // day, but the join may surface duplicates if multiple class_type_tasks
+      // share the phase (rare but possible).
+      const seen = new Set();
+      const classes = [];
+      for (const c of contributors) {
+        if (!c.class_id || seen.has(c.class_id)) continue;
+        seen.add(c.class_id);
+        classes.push({
+          id:           c.classes.id,
+          type:         c.classes.type,
+          classDate:    c.classes.class_date,
+          studentCount: c.classes.student_count ?? 0,
+        });
+      }
+      const totalStudents = classes.reduce((sum, c) => sum + (c.studentCount || 0), 0);
+      return {
+        fireDayId: f.id,
+        fireDate:  f.fire_date,
+        phase:     f.phase,
+        classes,
+        totalStudents,
+      };
+    });
   },
 };
 

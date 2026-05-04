@@ -262,6 +262,7 @@ def main():
                 "type":               c["type_name"],
                 "date":               c["class_date"],
                 "instructor":         c["instructor"],
+                "studentCount":       c["attendees"],
                 "kilnfireExternalId": c["kf_id"],
                 "notes":              f"Auto-imported from Kilnfire ({c['attendees']} attendees)",
             })
