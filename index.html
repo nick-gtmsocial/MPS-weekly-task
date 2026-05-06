@@ -74,6 +74,9 @@ a:hover{text-decoration:underline}
 .me-card-delete{background:#fff;color:var(--muted);border:2px solid var(--border);border-radius:6px;width:30px;height:30px;font-size:14px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all .15s;flex-shrink:0;margin-left:4px}
 .me-card-delete:hover{border-color:#DC2626;color:#DC2626;transform:scale(1.08)}
 .me-card-delete:active{transform:scale(0.95)}
+/* Legacy 'shared' assignment — flag for the team to reassign. */
+.planner-row.is-shared-legacy{background:#FFFBEB;border-left:3px solid #F59E0B}
+.planner-row.is-shared-legacy .planner-owner{border-color:#F59E0B;color:#92400E;font-weight:700}
 .me-card-batch{font-size:9px;font-weight:700;background:#FEF3C7;color:#92400E;padding:2px 6px;border-radius:3px;text-transform:uppercase;letter-spacing:.4px}
 .me-card-fading{opacity:.3;transition:opacity .25s}
 .me-card.is-done{opacity:.55}
@@ -1355,12 +1358,19 @@ function renderPlannerRow(t, allInWeek) {
   // Owner + done + date edit handlers branch by sourceKind so the right
   // table is mutated (weekly_tasks for class/recurring/manual; special_tasks
   // for special).
+  // 'shared' is being phased out — exclude it from new options. Legacy rows
+  // assigned to 'shared' still show it as the current selection so the
+  // dropdown isn't visually wrong; reassigning to a real person clears it.
+  const isLegacyShared = t.assignee === 'shared';
   const opts = ['<option value="">— unassigned —</option>']
-    .concat(STAFF.map(s => `<option value="${s.id}" ${t.assignee === s.id ? 'selected' : ''}>${s.name}</option>`))
+    .concat(isLegacyShared ? ['<option value="shared" selected>shared (reassign me)</option>'] : [])
+    .concat(STAFF
+      .filter(s => s.id !== 'shared')
+      .map(s => `<option value="${s.id}" ${t.assignee === s.id ? 'selected' : ''}>${s.name}</option>`))
     .join('');
 
   return `
-    <div class="planner-row ${isDone ? 'is-done' : ''}">
+    <div class="planner-row ${isDone ? 'is-done' : ''} ${isLegacyShared ? 'is-shared-legacy' : ''}">
       <span class="me-card-source ${sourceCls}">${sourceText}</span>
       <div class="planner-row-main">
         <div class="planner-row-title">${t.title}${classLabel}</div>
@@ -1463,7 +1473,8 @@ function openAddManualTaskModal() {
   const inWeek = todayIso >= key && todayIso <= addDaysIso(key, 6);
   const defaultDue = inWeek ? todayIso : key;
   const ownerOpts = '<option value="">— unassigned —</option>' +
-    STAFF.map(s => `<option value="${s.id}" ${s.id === currentUser ? 'selected' : ''}>${s.name}</option>`).join('');
+    STAFF.filter(s => s.id !== 'shared')
+         .map(s => `<option value="${s.id}" ${s.id === currentUser ? 'selected' : ''}>${s.name}</option>`).join('');
   modalState = { type: 'addManualTask' };
   openModal(`
     <div class="modal-header"><h3>Add task</h3></div>
@@ -2806,7 +2817,7 @@ function openCellModal(taskId, dayIndex) {
   const dates = getWeekDates(currentWeekStart);
   modalState = { type:'cell', taskId, dayIndex };
 
-  const staffOptions = STAFF.map(s =>
+  const staffOptions = STAFF.filter(s => s.id !== 'shared').map(s =>
     `<label class="staff-check">
       <input type="checkbox" name="assignees" value="${s.id}" ${a.assignees.includes(s.id)?'checked':''}>
       <span class="check-chip" style="background:${s.color}">${s.initial}</span>
