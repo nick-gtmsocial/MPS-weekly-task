@@ -71,6 +71,9 @@ a:hover{text-decoration:underline}
 .me-card-done.is-done{background:var(--teal);color:#fff;border-color:var(--teal)}
 .me-card-done.is-done:hover{background:var(--teal-dark);border-color:var(--teal-dark)}
 .me-card-done:active{transform:scale(0.95)}
+.me-card-delete{background:#fff;color:var(--muted);border:2px solid var(--border);border-radius:6px;width:30px;height:30px;font-size:14px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all .15s;flex-shrink:0;margin-left:4px}
+.me-card-delete:hover{border-color:#DC2626;color:#DC2626;transform:scale(1.08)}
+.me-card-delete:active{transform:scale(0.95)}
 .me-card-batch{font-size:9px;font-weight:700;background:#FEF3C7;color:#92400E;padding:2px 6px;border-radius:3px;text-transform:uppercase;letter-spacing:.4px}
 .me-card-fading{opacity:.3;transition:opacity .25s}
 .me-card.is-done{opacity:.55}
@@ -1144,6 +1147,12 @@ function renderMyWeekTab() {
     const doneBtn = item.doneId
       ? `<button class="me-card-done ${isDone ? 'is-done' : ''}" title="${isDone ? 'Un-mark done' : 'Mark done'}" onclick="event.stopPropagation(); toggleWeeklyTaskDone('${item.doneId}', '${item.status}', this)">✓</button>`
       : '';
+    // Delete button — for "not applicable today" rows. Soft-delete (recoverable
+    // for 30 days). Only on weekly_task projections; the Special Tasks tab has
+    // its own management for special_tasks.
+    const deleteBtn = item.doneId
+      ? `<button class="me-card-delete" title="Not applicable — remove from this week" onclick="event.stopPropagation(); deleteWeeklyTaskInline('${item.doneId}', this)">✕</button>`
+      : '';
     const batchPill = item.batched ? `<span class="me-card-batch">batch</span>` : '';
     // Always show a readable due-date label. For auto-generated tasks
     // (item.doneId set), pair the label with a small date-input button
@@ -1167,6 +1176,7 @@ function renderMyWeekTab() {
         ${dateField}
         <span class="me-card-status ${item.status}">${STATUS_LABELS[item.status] || item.status}</span>
         ${doneBtn}
+        ${deleteBtn}
       </div>
     </div>`;
   };
@@ -1363,6 +1373,8 @@ function renderPlannerRow(t, allInWeek) {
       <span class="me-card-status ${t.status}">${STATUS_LABELS[t.status] || t.status}</span>
       <button class="me-card-done ${isDone ? 'is-done' : ''}" title="${isDone ? 'Un-mark done' : 'Mark done'}"
               onclick="plannerToggleDone('${t.id}', '${t.sourceKind}', '${t.status}', this)">✓</button>
+      ${t.sourceKind !== 'special' ? `<button class="me-card-delete" title="Not applicable — remove from this week"
+              onclick="deleteWeeklyTaskInline('${t.id}', this)">✕</button>` : ''}
     </div>`;
 }
 
@@ -2214,6 +2226,23 @@ async function toggleWeeklyTaskDone(id, currentStatus, btnEl) {
   } catch (e) {
     if (card) card.classList.remove('me-card-fading');
     alert(`Couldn't update: ${e.message}`);
+  }
+}
+
+// Soft-delete a weekly_task row when the team marks it not-applicable for
+// today (e.g., "dispose garbage" but no garbage). Recoverable for 30 days
+// via the soft-delete column. Used by My Week + Planner inline ✕ buttons.
+async function deleteWeeklyTaskInline(id, btnEl) {
+  if (!confirm('Remove this task from the week? (Soft-delete — recoverable.)')) return;
+  const card = btnEl?.closest('.me-card, .planner-row');
+  if (card) card.classList.add('me-card-fading');
+  try {
+    await api('deleteWeeklyTask', { id });
+    await loadWeek(weekKey(currentWeekStart));
+    renderAll();
+  } catch (e) {
+    if (card) card.classList.remove('me-card-fading');
+    alert(`Couldn't delete: ${e.message}`);
   }
 }
 
