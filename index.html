@@ -74,6 +74,26 @@ a:hover{text-decoration:underline}
 .me-card-delete{background:#fff;color:var(--muted);border:2px solid var(--border);border-radius:6px;width:30px;height:30px;font-size:14px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all .15s;flex-shrink:0;margin-left:4px}
 .me-card-delete:hover{border-color:#DC2626;color:#DC2626;transform:scale(1.08)}
 .me-card-delete:active{transform:scale(0.95)}
+/* Class progression card — one card per class with clickable stage chips.
+   Miso's ask: "each class on a list with parts to check off." Each chip is
+   the underlying weekly_task; click toggles done. */
+.class-progress-card{background:#fff;border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:8px;display:flex;flex-direction:column;gap:8px}
+.class-progress-card.has-overdue{border-left:3px solid #F59E0B;padding-left:11px}
+.class-progress-card.is-done{opacity:.55;background:#F9FAFB}
+.class-progress-header{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.class-progress-type{font-weight:700;font-size:14px;color:var(--ink)}
+.class-progress-date{color:var(--muted);font-size:13px}
+.class-progress-summary{margin-left:auto;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.class-progress-stages{display:flex;flex-wrap:wrap;gap:6px}
+.stage-chip{background:#fff;border:1.5px solid var(--border);border-radius:18px;padding:5px 12px 5px 8px;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:all .12s;min-height:30px}
+.stage-chip:hover{border-color:var(--teal);color:var(--teal-dark)}
+.stage-chip.is-done{background:#ECFDF5;border-color:#10B981;color:#065F46}
+.stage-chip.is-done:hover{background:#D1FAE5}
+.stage-chip-mark{font-size:14px;line-height:1;width:14px;display:inline-flex;justify-content:center}
+.stage-chip-label{white-space:nowrap}
+/* Subtle phase color hints so the team can scan kiln stages quickly. */
+.stage-chip.phase-bisque:not(.is-done){border-left:3px solid #FB923C;padding-left:7px}
+.stage-chip.phase-glaze-fire:not(.is-done){border-left:3px solid #60A5FA;padding-left:7px}
 /* Legacy 'shared' assignment — flag for the team to reassign. */
 .planner-row.is-shared-legacy{background:#FFFBEB;border-left:3px solid #F59E0B}
 .planner-row.is-shared-legacy .planner-owner{border-color:#F59E0B;color:#92400E;font-weight:700}
@@ -369,7 +389,22 @@ a:hover{text-decoration:underline}
 .kiln-phase.phase-bisque{background:#FFEDD5;color:#9A3412}
 .kiln-phase.phase-glaze-fire{background:#DBEAFE;color:#1E3A8A}
 .kiln-notes{font-size:13px;color:var(--ink)}
-.kiln-actions{display:flex;gap:6px}
+.kiln-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;align-items:center}
+/* Three distinct buttons, plus minimum tap target so phones stop
+   cramming them into a single grey blob. Edit = teal (primary action),
+   Fired = green (completion), Remove = red border (destructive). */
+.kiln-btn-edit{background:#fff;color:var(--teal-dark);border:1px solid var(--teal);min-width:72px;font-weight:600}
+.kiln-btn-edit:hover{background:var(--teal-light)}
+.kiln-btn-fire{background:#16A34A;color:#fff;border:1px solid #15803D;min-width:84px;font-weight:600}
+.kiln-btn-fire:hover{background:#15803D}
+.kiln-btn-remove{background:#fff;color:#991B1B;border:1px solid #FCA5A5;min-width:80px;font-weight:600}
+.kiln-btn-remove:hover{background:#FEE2E2;border-color:#DC2626}
+.kiln-row.is-fired{opacity:.55;background:#F9FAFB}
+.kiln-row.is-fired .kiln-phase{filter:saturate(.4)}
+.kiln-fired-header{margin:24px 0 8px;font-size:13px;color:var(--gray);text-transform:uppercase;letter-spacing:1px;cursor:pointer;user-select:none}
+.kiln-fired-list{display:none}
+.kiln-fired-list.open{display:flex}
+.form-hint{font-size:12px;color:var(--gray);font-style:italic}
 .kiln-load{margin-top:6px;font-size:12px;color:var(--gray);display:flex;flex-wrap:wrap;gap:6px;align-items:baseline}
 .kiln-load-summary{font-weight:600;color:var(--ink)}
 .kiln-load-class{padding:1px 6px;border-radius:3px;background:var(--gray-light);color:var(--ink)}
@@ -1101,10 +1136,15 @@ function renderMyWeekTab() {
 
   // Auto-generated weekly_tasks (class/piece/recurring/manual). Goal/special
   // weekly_tasks are surfaced via their source tables above to avoid duping.
+  // CLASS-source tasks get pulled out of the flat list and grouped into
+  // class progression cards (see classProgressItems below) — Miso asked for
+  // one row per class with stage chips instead of 5 separate rows. Non-class
+  // weekly_tasks (recurring, manual) flow into the buckets as before.
   const allWeeklyForFlags = week.weeklyTasks || [];
   for (const t of allWeeklyForFlags) {
     if (t.assignee !== currentUser) continue;
     if (t.sourceKind === 'goal' || t.sourceKind === 'special') continue;
+    if (t.sourceKind === 'class' || t.sourceKind === 'piece') continue;
     const classLabel = t.classType
       ? ` · ${t.classType}${t.classDate ? ' · ' + fmtShortDate(t.classDate) : ''}`
       : '';
@@ -1121,6 +1161,13 @@ function renderMyWeekTab() {
       batched:   !!t.batchKey,
     });
   }
+
+  // Class progression — group class/piece weekly_tasks by class_id and
+  // render one card per class with stage chips. Only includes stages whose
+  // due_date falls in the currently-loaded week; earlier stages from past
+  // weeks aren't loaded into db.weeks[key], so the card reflects what's
+  // actionable now.
+  const classProgressItems = buildClassProgressItems(allWeeklyForFlags, week.classes || [], currentUser);
 
   // Buckets. Done items get their own collapsed section at the bottom so
   // staff see confirmation of what they finished without it cluttering
@@ -1193,6 +1240,18 @@ function renderMyWeekTab() {
      </div>`,
   ];
 
+  // Class progression section — top of the page when there's at least one
+  // class with assigned stages this week. Open classes (any stage not done)
+  // render first; fully-done classes get folded into a collapsed "complete"
+  // strip so the team can confirm without scrolling.
+  const openClasses = classProgressItems.filter(c => !c.allDone);
+  const doneClasses = classProgressItems.filter(c =>  c.allDone);
+  if (openClasses.length) html.push(
+    `<div class="me-section" data-section="classes">
+      <div class="me-section-header">Class progress <span class="me-section-count">${openClasses.length}</span></div>
+      ${openClasses.map(renderClassProgressCard).join('')}
+    </div>`);
+
   if (overdue.length) html.push(
     `<div class="me-section" data-section="overdue">
       <div class="me-section-header overdue">⚠ Overdue <span class="me-section-count">${overdue.length}</span></div>
@@ -1211,19 +1270,98 @@ function renderMyWeekTab() {
       ${rest.map(i => renderCard(i, '')).join('')}
     </div>`);
 
-  if (done.length) html.push(
+  if (done.length || doneClasses.length) html.push(
     `<div class="me-section" data-section="done">
-      <div class="me-section-header done">✓ Done <span class="me-section-count">${done.length}</span></div>
+      <div class="me-section-header done">✓ Done <span class="me-section-count">${done.length + doneClasses.length}</span></div>
+      ${doneClasses.map(c => renderClassProgressCard(c)).join('')}
       ${done.map(i => renderCard(i, 'done')).join('')}
     </div>`);
 
-  if (!overdue.length && !today.length && !rest.length && !done.length) html.push(
+  if (!overdue.length && !today.length && !rest.length && !done.length && !classProgressItems.length) html.push(
     `<div class="me-empty">
       <strong>No tasks assigned to ${staff.name} this week</strong>
       Head to <em>Weekly Tasks</em> or <em>Special Tasks</em> to assign some.
     </div>`);
 
   host.innerHTML = html.join('');
+}
+
+// Group class/piece-source weekly_tasks (already filtered to the relevant
+// staff member by the caller) by class_id and shape each group as a
+// progression item with sorted stages. Each stage is one of the underlying
+// weekly_tasks; the chips in the UI bind directly to those rows for
+// toggling done.
+function buildClassProgressItems(weeklyTasks, classes, currentUser) {
+  const byClass = new Map();
+  for (const t of weeklyTasks) {
+    if (t.assignee !== currentUser) continue;
+    if (t.sourceKind !== 'class' && t.sourceKind !== 'piece') continue;
+    if (!t.classId) continue;
+    if (!byClass.has(t.classId)) byClass.set(t.classId, []);
+    byClass.get(t.classId).push(t);
+  }
+  // Stable phase ordering for stage chips. Anything not in this list
+  // sorts to the end keyed by due_date.
+  const phaseOrder = { process: 1, bisque: 2, glaze: 3, 'glaze-fire': 4, finish: 5 };
+  return [...byClass.entries()].map(([classId, tasks]) => {
+    const cls = classes.find(c => c.id === classId);
+    const stages = tasks.slice().sort((a, b) => {
+      const pa = phaseOrder[a.phase] ?? 99;
+      const pb = phaseOrder[b.phase] ?? 99;
+      if (pa !== pb) return pa - pb;
+      return (a.dueDate || '').localeCompare(b.dueDate || '');
+    });
+    return {
+      classId,
+      classType: cls?.type || tasks[0].classType || '?',
+      classDate: cls?.date || tasks[0].classDate || null,
+      stages,
+      allDone: stages.every(s => s.status === 'done'),
+      anyOverdue: stages.some(s => s.status !== 'done' && s.dueDate && s.dueDate < todayInET()),
+    };
+  })
+    // Sort cards: most-recent class date first (most relevant to "this week's work"),
+    // tie-break by classType for stability.
+    .sort((a, b) => {
+      const da = a.classDate || '';
+      const db = b.classDate || '';
+      if (da !== db) return db.localeCompare(da);
+      return (a.classType || '').localeCompare(b.classType || '');
+    });
+}
+
+// One card per class. Stage chips render as clickable buttons; tapping a
+// chip toggles the underlying weekly_task's done status via the existing
+// handler. Title shows class type + date so a quick glance tells the team
+// what they're working on.
+function renderClassProgressCard(item) {
+  const stageLabelMap = {
+    process: 'Trim',
+    bisque: 'Bisque',
+    glaze: 'Glaze',
+    'glaze-fire': 'Glaze fire',
+    finish: 'Ready',
+  };
+  const chips = item.stages.map(s => {
+    const isDone   = s.status === 'done';
+    const label    = stageLabelMap[s.phase] || s.title;
+    const titleAttr = `${escapeAttr(s.title)} — Due ${s.dueDate ? fmtShortDate(s.dueDate) : '?'}${s.notes ? ' · ' + escapeAttr(s.notes) : ''}`;
+    return `<button class="stage-chip ${isDone ? 'is-done' : ''} phase-${s.phase || 'other'}"
+              title="${titleAttr}"
+              onclick="event.stopPropagation(); toggleWeeklyTaskDone('${s.id}', '${s.status}', this)">
+              <span class="stage-chip-mark">${isDone ? '✓' : '○'}</span>
+              <span class="stage-chip-label">${label}</span>
+            </button>`;
+  }).join('');
+  const dateLabel = item.classDate ? fmtShortDate(item.classDate) : '';
+  return `<div class="class-progress-card ${item.allDone ? 'is-done' : ''} ${item.anyOverdue ? 'has-overdue' : ''}">
+    <div class="class-progress-header">
+      <span class="class-progress-type">${escapeAttr(item.classType)}</span>
+      ${dateLabel ? `<span class="class-progress-date">· ${dateLabel}</span>` : ''}
+      <span class="class-progress-summary">${item.stages.filter(s => s.status === 'done').length}/${item.stages.length} done</span>
+    </div>
+    <div class="class-progress-stages">${chips}</div>
+  </div>`;
 }
 
 // ── PLANNER TAB ────────────────────────────────
@@ -2296,11 +2434,16 @@ async function renderKilnTab() {
   const root = document.getElementById('kiln-list');
   if (!root) return;
   const today = todayInET();
-  const upcoming = (db.fireSchedule || [])
-    .filter(f => f.fireDate >= today)
+  // Show upcoming + recent-fired so the team can see what just happened.
+  // Anything older than 14 days drops off the view (still in DB).
+  const cutoff = addDaysIso(today, -14);
+  const all = (db.fireSchedule || [])
+    .filter(f => f.fireDate >= cutoff)
     .sort((a, b) => a.fireDate.localeCompare(b.fireDate));
+  const upcoming = all.filter(f => !f.fired);
+  const fired    = all.filter(f =>  f.fired);
 
-  if (!upcoming.length) {
+  if (!all.length) {
     root.innerHTML = `
       <div class="empty-state">
         <div class="empty-icon">No fires scheduled</div>
@@ -2365,12 +2508,41 @@ async function renderKilnTab() {
             ${loadHtml}
           </div>
           <div class="kiln-actions">
-            <button class="btn btn-outline btn-sm" onclick="deleteFireDay('${f.id}')">Remove</button>
+            <button class="btn btn-sm kiln-btn-edit" onclick="openEditFireDayModal('${f.id}')" title="Change date, phase, or merge with another fire">Edit</button>
+            <button class="btn btn-sm kiln-btn-fire" onclick="confirmMarkFireDayFired('${f.id}')" title="Mark this fire as completed (with confirmation)">✓ Fired</button>
+            <button class="btn btn-sm kiln-btn-remove" onclick="deleteFireDay('${f.id}')" title="Remove (soft-delete, recoverable)">Remove</button>
           </div>
         </div>`;
     }
     html += '</div>';
   }
+
+  if (fired.length) {
+    html += `<h3 class="kiln-fired-header" onclick="document.getElementById('kiln-fired-list').classList.toggle('open')">
+      ▸ Fired (${fired.length}) — recently completed
+    </h3>
+    <div id="kiln-fired-list" class="kiln-rows kiln-fired-list">`;
+    for (const f of fired) {
+      const d = new Date(`${f.fireDate}T12:00:00Z`);
+      const dayName = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getUTCDay()];
+      const phaseLabel = f.phase === 'bisque' ? 'Bisque' : 'Glaze fire';
+      html += `
+        <div class="kiln-row is-fired">
+          <div class="kiln-date">
+            <div class="kiln-date-day">${dayName} ${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}</div>
+            <div class="kiln-date-iso">${f.fireDate}</div>
+          </div>
+          <div class="kiln-phase phase-${f.phase}">${phaseLabel}</div>
+          <div class="kiln-notes">${f.notes ? escapeAttr(f.notes) : '<span style="color:var(--gray);">—</span>'}</div>
+          <div class="kiln-actions">
+            <button class="btn btn-sm kiln-btn-edit" onclick="markFireDayFired('${f.id}', false)" title="Un-mark — re-open this fire">↺ Un-fire</button>
+            <button class="btn btn-sm kiln-btn-remove" onclick="deleteFireDay('${f.id}')">Remove</button>
+          </div>
+        </div>`;
+    }
+    html += '</div>';
+  }
+
   root.innerHTML = html;
 }
 
@@ -2435,6 +2607,122 @@ async function deleteFireDay(id) {
     renderKilnTab();
   } catch (e) {
     alert(`Couldn't remove: ${e.message}`);
+  }
+}
+
+// Mark a scheduled fire as done (or un-mark). Fired rows drop out of the
+// generator's snap target + kilnLoadPreview, so the Kiln tab stays
+// forward-looking without losing history.
+async function markFireDayFired(id, fired) {
+  try {
+    const row = await api('markFireDayFired', { id, fired });
+    db.fireSchedule = (db.fireSchedule || []).map(f => f.id === id ? row : f);
+    renderKilnTab();
+  } catch (e) {
+    alert(`Couldn't update: ${e.message}`);
+  }
+}
+
+// Confirmation wrapper for the upcoming-fires "✓ Fired" button. Without
+// this, a stray tap (especially on mobile where buttons crowd together)
+// silently moves the row out of the active list — which is what bit Nick
+// the first time. Always confirm before mutating.
+async function confirmMarkFireDayFired(id) {
+  const row = (db.fireSchedule || []).find(f => f.id === id);
+  if (!row) return;
+  const phaseLabel = row.phase === 'bisque' ? 'bisque' : 'glaze fire';
+  if (!confirm(`Mark the ${phaseLabel} on ${row.fireDate} as fired (completed)? You can un-mark it from the Fired section.`)) return;
+  await markFireDayFired(id, true);
+}
+
+// Edit modal — change date, phase, or notes. When the date or phase
+// changes, all snapped tasks (matching the OLD date + phase, still on
+// their original day, not done) move with it. The team sees a count of
+// what'll move before they confirm.
+async function openEditFireDayModal(id) {
+  const row = (db.fireSchedule || []).find(f => f.id === id);
+  if (!row) return;
+  const today = todayInET();
+  // Pre-compute how many tasks would move if the date/phase changes.
+  // This is the exact set updateFireDay's cascade will touch.
+  const week = getWeek(weekKey(currentWeekStart));
+  // We don't have all weeks loaded — use the current loadByFireId bucket
+  // as a hint. The server is the source of truth; just show the rough
+  // number from kilnLoadPreview if available.
+  let preview = null;
+  try {
+    preview = await api('kilnLoadPreview', { from: today });
+  } catch (e) { /* non-fatal */ }
+  const load = (preview || []).find(p => p.fireDayId === id);
+  const cascadeHint = load
+    ? `<span class="form-hint">If you change the date/phase, ~${load.totalStudents} student${load.totalStudents===1?'':'s'} worth of tasks across ${load.classes.length} class${load.classes.length===1?'':'es'} will move with this fire.</span>`
+    : `<span class="form-hint">Tasks currently snapped to this fire's date will move with it (only open tasks; done work stays).</span>`;
+
+  // Existing fires of the same phase the user could merge into instead.
+  const mergeTargets = (db.fireSchedule || [])
+    .filter(f => f.id !== id && !f.fired && f.phase === row.phase)
+    .sort((a, b) => a.fireDate.localeCompare(b.fireDate));
+  const mergeOpts = '<option value="">— don\'t merge, just edit —</option>'
+    + mergeTargets.map(t => `<option value="${t.id}">Merge into ${t.fireDate} (${t.phase})</option>`).join('');
+
+  modalState = { mode: 'edit', id };
+  document.getElementById('modal-content').innerHTML = `
+    <div class="modal-card">
+      <h2>Edit fire</h2>
+      <div class="form-field">
+        <label>Date</label>
+        <input type="date" id="fire-date" value="${row.fireDate}">
+      </div>
+      <div class="form-field">
+        <label>Phase</label>
+        <div class="radio-row">
+          <label><input type="radio" name="fire-phase" value="bisque" ${row.phase==='bisque'?'checked':''}> Bisque</label>
+          <label><input type="radio" name="fire-phase" value="glaze-fire" ${row.phase==='glaze-fire'?'checked':''}> Glaze fire</label>
+        </div>
+      </div>
+      <div class="form-field">
+        <label>Notes</label>
+        <input type="text" id="fire-notes" value="${escapeAttr(row.notes || '')}">
+      </div>
+      ${mergeTargets.length ? `<div class="form-field">
+        <label>Or merge into another scheduled fire <span style="font-weight:400;color:var(--gray);font-size:12px;">(soft-deletes this row; tasks combine)</span></label>
+        <select id="fire-merge">${mergeOpts}</select>
+      </div>` : ''}
+      <div class="form-field">${cascadeHint}</div>
+      <div class="modal-actions">
+        <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveEditFireDay()">Save</button>
+      </div>
+    </div>`;
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+async function saveEditFireDay() {
+  const snap = modalState;
+  if (!snap?.id) { closeModal(); return; }
+  const fireDate = document.getElementById('fire-date').value;
+  const phase    = document.querySelector('input[name="fire-phase"]:checked')?.value;
+  const notes    = document.getElementById('fire-notes').value.trim();
+  const mergeId  = document.getElementById('fire-merge')?.value || null;
+  if (!fireDate || !phase) { alert('Pick a date and phase.'); return; }
+  try {
+    const result = await api('updateFireDay', mergeId
+      ? { id: snap.id, mergeWithExistingId: mergeId }
+      : { id: snap.id, fireDate, phase, notes: notes || null });
+    closeModal();
+    // Reload the week so cascaded weekly_tasks render at their new dates.
+    await loadWeek(weekKey(currentWeekStart));
+    if (result.merged) {
+      alert(`Merged. ${result.cascadedTaskCount || 0} task${result.cascadedTaskCount===1?'':'s'} moved.`);
+    } else if (result.cascadedTaskCount) {
+      // Surface the cascade count so the team knows their move took effect.
+      const note = document.createElement('div');
+      // keep it lightweight — quick toast via alert until we have a real toast system
+      console.log(`fire updated; ${result.cascadedTaskCount} tasks moved with it`);
+    }
+    renderAll();
+  } catch (e) {
+    alert(`Couldn't save: ${e.message}`);
   }
 }
 
