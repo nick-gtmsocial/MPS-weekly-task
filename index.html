@@ -851,10 +851,14 @@ function getWeek(key) { return ensureWeekSlot(key); }
 async function loadWeek(key) {
   const bundle = await apiRequest('GET', `${API_URL}?week=${key}`);
   db.weeks[key] = {
-    assignments:  bundle.assignments  || {},
-    classes:      bundle.classes       || [],
-    goalTasks:    bundle.goalTasks     || [],
-    weeklyTasks:  bundle.weeklyTasks   || [],
+    assignments:        bundle.assignments        || {},
+    classes:            bundle.classes             || [],
+    goalTasks:          bundle.goalTasks           || [],
+    weeklyTasks:        bundle.weeklyTasks         || [],
+    // All weekly_tasks for classes touched by this week, across all weeks.
+    // Powers the class-progression card's full Trim → Bisque → Glaze →
+    // Glaze-fire → Ready lifecycle (vs current-week-only chips).
+    classProgressTasks: bundle.classProgressTasks  || [],
   };
   db.specialTasks = bundle.specialTasks || [];
   // Fire schedule is global (not week-scoped). Each week-load returns the
@@ -1163,11 +1167,17 @@ function renderMyWeekTab() {
   }
 
   // Class progression — group class/piece weekly_tasks by class_id and
-  // render one card per class with stage chips. Only includes stages whose
-  // due_date falls in the currently-loaded week; earlier stages from past
-  // weeks aren't loaded into db.weeks[key], so the card reflects what's
-  // actionable now.
-  const classProgressItems = buildClassProgressItems(allWeeklyForFlags, week.classes || [], currentUser);
+  // render one card per class with stage chips for the FULL lifecycle
+  // (Trim → Bisque → Glaze → Glaze-fire → Ready). The server returns all
+  // weekly_tasks for any class touched in this week, across every week,
+  // so a class's earlier or later stages render too even if they live in
+  // adjacent weeks. The currentUser filter applies at the card level
+  // (must own at least one stage); the chips themselves show every stage.
+  const classProgressItems = buildClassProgressItems(
+    week.classProgressTasks || allWeeklyForFlags,
+    week.classes || [],
+    currentUser
+  );
 
   // Buckets. Done items get their own collapsed section at the bottom so
   // staff see confirmation of what they finished without it cluttering
@@ -1292,9 +1302,10 @@ function renderMyWeekTab() {
 // weekly_tasks; the chips in the UI bind directly to those rows for
 // toggling done.
 function buildClassProgressItems(weeklyTasks, classes, currentUser) {
+  // First pass: group all class/piece-source tasks by class_id (no
+  // assignee filter — we want the full lifecycle on each card).
   const byClass = new Map();
   for (const t of weeklyTasks) {
-    if (t.assignee !== currentUser) continue;
     if (t.sourceKind !== 'class' && t.sourceKind !== 'piece') continue;
     if (!t.classId) continue;
     if (!byClass.has(t.classId)) byClass.set(t.classId, []);
@@ -1303,23 +1314,28 @@ function buildClassProgressItems(weeklyTasks, classes, currentUser) {
   // Stable phase ordering for stage chips. Anything not in this list
   // sorts to the end keyed by due_date.
   const phaseOrder = { process: 1, bisque: 2, glaze: 3, 'glaze-fire': 4, finish: 5 };
-  return [...byClass.entries()].map(([classId, tasks]) => {
-    const cls = classes.find(c => c.id === classId);
-    const stages = tasks.slice().sort((a, b) => {
-      const pa = phaseOrder[a.phase] ?? 99;
-      const pb = phaseOrder[b.phase] ?? 99;
-      if (pa !== pb) return pa - pb;
-      return (a.dueDate || '').localeCompare(b.dueDate || '');
-    });
-    return {
-      classId,
-      classType: cls?.type || tasks[0].classType || '?',
-      classDate: cls?.date || tasks[0].classDate || null,
-      stages,
-      allDone: stages.every(s => s.status === 'done'),
-      anyOverdue: stages.some(s => s.status !== 'done' && s.dueDate && s.dueDate < todayInET()),
-    };
-  })
+  return [...byClass.entries()]
+    // Card-level filter — only show classes where the current user owns
+    // at least one stage. Without this, every staff member would see
+    // every class on My Week.
+    .filter(([, tasks]) => tasks.some(t => t.assignee === currentUser))
+    .map(([classId, tasks]) => {
+      const cls = classes.find(c => c.id === classId);
+      const stages = tasks.slice().sort((a, b) => {
+        const pa = phaseOrder[a.phase] ?? 99;
+        const pb = phaseOrder[b.phase] ?? 99;
+        if (pa !== pb) return pa - pb;
+        return (a.dueDate || '').localeCompare(b.dueDate || '');
+      });
+      return {
+        classId,
+        classType: cls?.type || tasks[0].classType || '?',
+        classDate: cls?.date || tasks[0].classDate || null,
+        stages,
+        allDone: stages.every(s => s.status === 'done'),
+        anyOverdue: stages.some(s => s.status !== 'done' && s.dueDate && s.dueDate < todayInET()),
+      };
+    })
     // Sort cards: most-recent class date first (most relevant to "this week's work"),
     // tie-break by classType for stability.
     .sort((a, b) => {

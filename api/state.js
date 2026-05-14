@@ -74,7 +74,7 @@ async function handleGet(req, res) {
     // the week's Monday onward so the Kiln tab can render the same source
     // as the rest of the bundle. Defensive: if the migration hasn't run
     // yet, return [] instead of breaking the whole bundle fetch.
-    sbGet(`fire_schedule?deleted_at=is.null&fire_date=gte.${weekKey}&select=id,fire_date,phase,capacity,notes&order=fire_date.asc`)
+    sbGet(`fire_schedule?deleted_at=is.null&fire_date=gte.${weekKey}&select=id,fire_date,phase,capacity,notes,fired&order=fire_date.asc`)
       .catch(() => []),
   ]);
 
@@ -82,6 +82,19 @@ async function handleGet(req, res) {
   // so strip soft-deleted pieces client-side. Cheap, robust.
   for (const c of classRows) {
     if (c.pieces) c.pieces = c.pieces.filter(p => !p.deleted_at);
+  }
+
+  // Class progression: for any class touched by this week's weekly_tasks,
+  // pull EVERY weekly_task for that class across ALL weeks. The My Week
+  // class-progression card needs the full Trim → Bisque → Glaze → Glaze-
+  // fire → Ready lifecycle, not just the chips landing in the current
+  // week. ~5 rows per class × ~10 classes/week = bounded.
+  const classIdsTouched = [...new Set(weeklyTaskRows.map(t => t.class_id).filter(Boolean))];
+  let classProgressTasks = [];
+  if (classIdsTouched.length) {
+    classProgressTasks = await sbGet(
+      `weekly_tasks?class_id=in.(${classIdsTouched.join(',')})&deleted_at=is.null&select=*,classes(type,class_date),pieces(student)&order=due_date.asc`
+    ).catch(() => []);
   }
 
   return res.status(200).json({
@@ -92,6 +105,7 @@ async function handleGet(req, res) {
     goalTasks:    goalTaskRows.map(shapeGoalTaskForWeek),
     weeklyTasks:  weeklyTaskRows.map(shapeWeeklyTask),
     fireSchedule: fireRows.map(shapeFireDay),
+    classProgressTasks: classProgressTasks.map(shapeWeeklyTask),
   });
 }
 
@@ -102,6 +116,7 @@ function shapeFireDay(r) {
     phase:    r.phase,
     capacity: r.capacity,
     notes:    r.notes,
+    fired:    !!r.fired,
   };
 }
 
@@ -498,7 +513,7 @@ const OPS = {
   // generateForClass(classId) explicitly if you want a class re-snapped.
   async listFireDays({ from } = {}) {
     const since = (from && /^\d{4}-\d{2}-\d{2}$/.test(from)) ? from : new Date().toISOString().slice(0, 10);
-    const rows = await sbGet(`fire_schedule?deleted_at=is.null&fire_date=gte.${since}&select=id,fire_date,phase,capacity,notes&order=fire_date.asc`);
+    const rows = await sbGet(`fire_schedule?deleted_at=is.null&fire_date=gte.${since}&select=id,fire_date,phase,capacity,notes,fired&order=fire_date.asc`);
     return rows.map(shapeFireDay);
   },
 
@@ -519,24 +534,104 @@ const OPS = {
     return shapeFireDay(row);
   },
 
-  async updateFireDay({ id, fireDate, phase, capacity, notes }) {
+  // Edit a scheduled fire. When the date changes, also move every snapped
+  // weekly_task that's still pointing at the old date to the new date —
+  // that's the "postpone everything attached to this fire" workflow Sarah
+  // asked for. Cascade ONLY moves rows that:
+  //   - share the fire's phase (bisque/glaze-fire)
+  //   - have due_date == old fire_date (still on the originally-snapped day)
+  //   - are class-source (class_id IS NOT NULL)
+  //   - are open (status not in done/cancelled)
+  //   - aren't soft-deleted
+  // Tasks that someone has already moved manually keep their hand-picked
+  // date. Done work stays. The response includes `cascadedTaskCount` so
+  // the client can show "moved N tasks".
+  //
+  // If `mergeWithExistingId` is set, we use THAT fire's date as the target
+  // (and soft-delete this fire). That covers the "swap" case — two
+  // scheduled fires combine into one, all tasks from both pile onto the
+  // surviving date.
+  async updateFireDay({ id, fireDate, phase, capacity, notes, mergeWithExistingId }) {
     requireFields({ id });
+    const [old] = await sbGet(`fire_schedule?id=eq.${id}&select=id,fire_date,phase,fired,deleted_at`);
+    if (!old) { const err = new Error(`fire_schedule ${id} not found`); err.status = 404; throw err; }
+
     const patch = { updated_at: new Date().toISOString() };
-    if (fireDate !== undefined) {
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(fireDate)) {
-        const err = new Error('fireDate must be YYYY-MM-DD'); err.status = 400; throw err;
+    let targetDate = old.fire_date;
+    let targetPhase = old.phase;
+    let mergeFire = null;
+
+    if (mergeWithExistingId) {
+      const [m] = await sbGet(`fire_schedule?id=eq.${mergeWithExistingId}&deleted_at=is.null&select=id,fire_date,phase`);
+      if (!m) { const err = new Error(`merge target ${mergeWithExistingId} not found or deleted`); err.status = 404; throw err; }
+      if (m.phase !== old.phase) { const err = new Error('merge target must have same phase'); err.status = 400; throw err; }
+      targetDate = m.fire_date;
+      targetPhase = m.phase;
+      mergeFire = m;
+    } else {
+      if (fireDate !== undefined) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(fireDate)) {
+          const err = new Error('fireDate must be YYYY-MM-DD'); err.status = 400; throw err;
+        }
+        patch.fire_date = fireDate;
+        targetDate = fireDate;
       }
-      patch.fire_date = fireDate;
-    }
-    if (phase !== undefined) {
-      if (phase !== 'bisque' && phase !== 'glaze-fire') {
-        const err = new Error("phase must be 'bisque' or 'glaze-fire'"); err.status = 400; throw err;
+      if (phase !== undefined) {
+        if (phase !== 'bisque' && phase !== 'glaze-fire') {
+          const err = new Error("phase must be 'bisque' or 'glaze-fire'"); err.status = 400; throw err;
+        }
+        patch.phase = phase;
+        targetPhase = phase;
       }
-      patch.phase = phase;
+      if (capacity !== undefined) patch.capacity = capacity == null ? null : Number(capacity);
+      if (notes    !== undefined) patch.notes    = notes || null;
     }
-    if (capacity !== undefined) patch.capacity = capacity == null ? null : Number(capacity);
-    if (notes    !== undefined) patch.notes    = notes || null;
+
+    // Cascade — only when date or phase actually changed.
+    let cascadedTaskCount = 0;
+    const dateChanged  = targetDate  !== old.fire_date;
+    const phaseChanged = targetPhase !== old.phase;
+    if (dateChanged || phaseChanged) {
+      const targetWeek = (() => {
+        const d = new Date(`${targetDate}T12:00:00Z`);
+        const dow = d.getUTCDay();
+        d.setUTCDate(d.getUTCDate() + (dow === 0 ? -6 : 1 - dow));
+        return d.toISOString().slice(0, 10);
+      })();
+      const moved = await sbPatch(
+        `weekly_tasks?phase=eq.${old.phase}&due_date=eq.${old.fire_date}&deleted_at=is.null&class_id=not.is.null&status=not.in.(done,cancelled)`,
+        { due_date: targetDate, week_key: targetWeek, phase: targetPhase, updated_at: new Date().toISOString() }
+      );
+      cascadedTaskCount = Array.isArray(moved) ? moved.length : 0;
+    }
+
+    if (mergeFire) {
+      // Soft-delete the merged-from fire — the target absorbs its tasks.
+      await sbPatch(`fire_schedule?id=eq.${id}`, {
+        deleted_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+      return {
+        ...shapeFireDay({ ...old, deleted_at: new Date().toISOString() }),
+        merged: true,
+        mergedInto: mergeFire.id,
+        cascadedTaskCount,
+      };
+    }
+
     const [row] = await sbPatch(`fire_schedule?id=eq.${id}`, patch);
+    return { ...shapeFireDay(row), cascadedTaskCount };
+  },
+
+  // Toggle the fired flag. When fired=true the row drops out of the
+  // generator's snap target and load-preview, so the Kiln tab becomes a
+  // forward-looking schedule. The row stays for history (not deleted).
+  async markFireDayFired({ id, fired }) {
+    requireFields({ id });
+    const [row] = await sbPatch(`fire_schedule?id=eq.${id}`, {
+      fired: fired === false ? false : true,
+      updated_at: new Date().toISOString(),
+    });
     return shapeFireDay(row);
   },
 
@@ -556,7 +651,7 @@ const OPS = {
   async kilnLoadPreview({ from } = {}) {
     const since = (from && /^\d{4}-\d{2}-\d{2}$/.test(from)) ? from : new Date().toISOString().slice(0, 10);
     const fires = await sbGet(
-      `fire_schedule?deleted_at=is.null&fire_date=gte.${since}&select=id,fire_date,phase&order=fire_date.asc`
+      `fire_schedule?deleted_at=is.null&fired=eq.false&fire_date=gte.${since}&select=id,fire_date,phase&order=fire_date.asc`
     );
     if (!fires.length) return [];
 
