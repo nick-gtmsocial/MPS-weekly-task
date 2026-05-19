@@ -21,7 +21,10 @@ const recurringTasks = [
   { id: 'deep-clean-kiln',     title: 'Deep clean kiln interior (grounded vac), exterior, and table area', cadence: 'quarterly', defaultOwner: 'shared', durationMinutes: 60 },
 
   // ── Monthly ──
-  { id: 'members-clay',        title: "Prepare members' clay (pre-portion + invoice update)", cadence: 'monthly', defaultOwner: 'kizza', durationMinutes: 60 },
+  // members-clay moved to biweekly per Miso (2026-05-19): she breaks it into
+  // 2 batches/month because the bin can't hold a full month at once.
+  // (kept under "Monthly" section header for narrative continuity.)
+  { id: 'members-clay',        title: "Prepare members' clay (pre-portion + invoice update)", cadence: 'biweekly', defaultOwner: 'miso', durationMinutes: 60, notes: "2× per month per Miso — bin can't hold a full month's clay." },
   { id: 'mix-clear-glaze',     title: 'Mix clear glaze (if less than 1/3 of bucket remains)',  cadence: 'monthly', defaultOwner: 'kizza', durationMinutes: 45 },
   { id: 'sieve-glazes',        title: 'Sieve all glazes + recheck specific gravity',           cadence: 'monthly', defaultOwner: 'kizza', durationMinutes: 60, notes: 'One dedicated mixing stick per bucket, stored on hooks to dry.' },
   { id: 'workshop-cleanup',    title: 'Workshop / member-area maintenance (sweep, wipe, table-clean)', cadence: 'monthly', defaultOwner: 'shared', durationMinutes: 45 },
@@ -38,7 +41,7 @@ const recurringTasks = [
   { id: 'dispose-recyclables', title: 'Dispose recyclables',                                          cadence: 'weekly', defaultOwner: 'shared', durationMinutes: 15 },
   { id: 'mop-floor-1',         title: 'Mop floor (Tuesday)',                                          cadence: 'weekly', defaultOwner: 'shared', durationMinutes: 20 },
   { id: 'mop-floor-2',         title: 'Mop floor (Friday)',                                           cadence: 'weekly', defaultOwner: 'shared', durationMinutes: 20 },
-  { id: 'invoicing',           title: 'Issue invoices (members, instructors)',                        cadence: 'weekly', defaultOwner: 'nick',   durationMinutes: 20 },
+  { id: 'invoicing',           title: 'Issue invoices (members, instructors)',                        cadence: 'weekly', defaultOwner: 'miso',   durationMinutes: 20 },
 ];
 
 async function upsert(t) {
