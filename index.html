@@ -508,6 +508,26 @@ a:hover{text-decoration:underline}
 
   /* TASK TABLE (legacy Weekly Tasks tab) — give it horizontal scroll */
   .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+  /* CLASS PROGRESSION CARD — bigger tap targets on phones. Default chip
+     was 30px tall / 12px text — below Apple's 44px and easy to mis-tap
+     (Nick set May 14 fire to glaze by accident). Now ~44px tall, 14px
+     text, generous padding. Chips still wrap onto multiple rows. */
+  .class-progress-card { padding: 14px; gap: 12px; }
+  .class-progress-type { font-size: 16px; }
+  .class-progress-date { font-size: 14px; }
+  .class-progress-summary { font-size: 12px; }
+  .class-progress-stages { gap: 8px; }
+  .stage-chip {
+    font-size: 14px;
+    padding: 10px 14px 10px 12px;
+    min-height: 44px;
+    border-width: 2px;
+    border-radius: 22px;
+    flex: 1 1 calc(50% - 4px);   /* two per row on narrow phones */
+    justify-content: flex-start;
+  }
+  .stage-chip-mark { font-size: 16px; width: 18px; }
 }
 </style>
 </head>
