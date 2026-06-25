@@ -233,6 +233,43 @@ const classTypes = [
       { phase: 'finish',     title: 'Mark ready for pickup',      offsetDays: 16, durationMinutes:  30, defaultOwner: 'shared',                   notes: 'Unload, label by couple, stage on pickup shelf.' },
     ],
   },
+
+  // ────────────────────────────────────────────────────────────
+  // Ceramic Jewelry for Beginners — small handbuilt pieces (pendants,
+  // earrings, charms) that get metal findings attached AFTER the glaze
+  // fire. The 'assembly' stage (attach hooks / posts / jump rings /
+  // clasps) is unique to jewelry — no other class type has it.
+  //
+  // Owner conventions: kiln stages → Miso (loads the kiln, as everywhere).
+  // Clear-glaze + Assembly are deliberately left UNASSIGNED (Nick,
+  // 2026-06-24): the manager picks an owner each week instead of the work
+  // auto-dropping on the instructor. We use the 'unassigned' sentinel —
+  // plain null / 'shared' would fall back to the class instructor in the
+  // engine (lib/generators.js pickOwner).
+  //
+  // Offsets are a PLACEHOLDER — all stages at +4d "for now" (Nick,
+  // 2026-06-24). Revisit once the real jewelry cadence is known. (Bisque
+  // & Glaze fire still snap to the team's scheduled kiln days regardless.)
+  //
+  // 'glaze-clear' phase (rather than the shared 'glaze') is used only so
+  // the progression chip reads "Clear glaze". Switch this stage to phase
+  // 'glaze' if you'd rather jewelry clear-glazing pool into the same dunk
+  // session as Matcha Bowl / Mug Workshop.
+  {
+    id:                'ceramic-jewelry',
+    name:              'Ceramic Jewelry for Beginners',
+    piecesPerStudent:  4,
+    glazeMethod:       'dunk',
+    pickupWindowDays:  28,
+    notes:             'Small handbuilt jewelry (pendants, earrings, charms). Metal findings attached at Assembly, after the glaze fire. Stage offsets are a placeholder +4d pending the real cadence.',
+    tasks: [
+      { phase: 'bisque',      title: 'Bisque fire',           offsetDays: 4, durationMinutes: 30, defaultOwner: 'miso',       batchable: true },
+      { phase: 'glaze-clear', title: 'Clear glaze',           offsetDays: 4, durationMinutes: 45, defaultOwner: 'unassigned', batchable: true,  notes: 'Wax-resist holes / bails first so findings seat cleanly.' },
+      { phase: 'glaze-fire',  title: 'Glaze fire',            offsetDays: 4, durationMinutes: 30, defaultOwner: 'miso',       batchable: true },
+      { phase: 'assembly',    title: 'Assembly',              offsetDays: 4, durationMinutes: 60, defaultOwner: 'unassigned',                   notes: 'Attach findings — hooks, posts, jump rings, clasps.' },
+      { phase: 'finish',      title: 'Mark ready for pickup', offsetDays: 4, durationMinutes: 20, defaultOwner: 'shared' },
+    ],
+  },
 ];
 
 async function upsert(ct) {

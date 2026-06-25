@@ -1333,7 +1333,7 @@ function buildClassProgressItems(weeklyTasks, classes, currentUser) {
   }
   // Stable phase ordering for stage chips. Anything not in this list
   // sorts to the end keyed by due_date.
-  const phaseOrder = { process: 1, bisque: 2, glaze: 3, 'glaze-fire': 4, finish: 5 };
+  const phaseOrder = { process: 1, bisque: 2, glaze: 3, 'glaze-clear': 4, 'glaze-fire': 5, assembly: 6, finish: 7 };
   return [...byClass.entries()]
     // Card-level filter — only show classes where the current user owns
     // at least one stage. Without this, every staff member would see
@@ -1375,7 +1375,9 @@ function renderClassProgressCard(item) {
     process: 'Trim',
     bisque: 'Bisque',
     glaze: 'Glaze',
+    'glaze-clear': 'Clear glaze',
     'glaze-fire': 'Glaze fire',
+    assembly: 'Assembly',
     finish: 'Ready',
   };
   const chips = item.stages.map(s => {

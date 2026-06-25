@@ -37,6 +37,7 @@ TEMPLATE_PATTERNS = [
     ("matcha set",      "matcha-set"),
     ("matcha bowl",     "matcha-bowl"),
     ("clay date",       "clay-date"),
+    ("ceramic jewel",   "ceramic-jewelry"),   # matches "jewelry" (US) and "jewellery" (UK)
     ("mug workshop",    "mug"),
     ("decorate a mug",  "mug"),
     ("mug",             "mug"),
@@ -61,6 +62,7 @@ TYPE_NAMES = {
     "matcha-set":           "Matcha Set (2-week course)",
     "mug":                  "Mug Workshop",
     "clay-date":            "Clay Date for Two",
+    "ceramic-jewelry":      "Ceramic Jewelry for Beginners",
     "open-studio":          "Open Studio",
     "handbuilding-project": "Project-based Handbuilding",
     "festive-house":        "Festive House",

@@ -122,6 +122,35 @@ test('engine: My Week surfaces auto-generated task for the assigned staff', asyn
   await expect(page.locator('#me-content')).toContainText('Taster Class');
 });
 
+test('engine: Ceramic Jewelry generates 5 stages; clear-glaze + assembly are unassigned', async () => {
+  // Requires the ceramic-jewelry class type to be seeded
+  // (node scripts/seed-class-types.js). All five stages use a +4 offset,
+  // so for a class on Jan 7 they all land Jan 11 — inside the test week.
+  const cls = await api('addClass', {
+    weekKey: TEST_WEEK_KEY,
+    type:    'Ceramic Jewelry for Beginners',
+    date:    '2099-01-07',
+    instructor: 'cielo',
+  });
+  expect(cls.generation).toBeTruthy();
+  expect(cls.generation.totalTasks).toBe(5);
+
+  const bundle = await fetchWeek(TEST_WEEK_KEY);
+  const mine = bundle.weeklyTasks.filter(t => t.classId === cls.id);
+  expect(mine.length).toBe(5);
+
+  const byPhase = Object.fromEntries(mine.map(t => [t.phase, t]));
+  // Kiln stages auto-load on Miso (studio-wide kiln-loading convention).
+  expect(byPhase['bisque'].assignee).toBe('miso');
+  expect(byPhase['glaze-fire'].assignee).toBe('miso');
+  // Hand-work stages are deliberately left unassigned — the manager picks
+  // an owner each week (the 'unassigned' sentinel; NOT instructor-fallback).
+  expect(byPhase['glaze-clear'].assignee).toBeNull();
+  expect(byPhase['assembly'].assignee).toBeNull();
+  // 'assembly' is the jewelry-only stage (attach findings post-glaze-fire).
+  expect(byPhase['assembly'].title).toBe('Assembly');
+});
+
 test('engine: marking a weekly task done updates server status', async () => {
   await api('addClass', { weekKey: TEST_WEEK_KEY, type: 'Taster Class', date: '2099-01-07', instructor: 'cielo' });
 
